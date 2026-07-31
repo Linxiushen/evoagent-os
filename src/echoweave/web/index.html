@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="EchoWeave-RTC consent-first realtime digital-twin agent demo"
+    />
+    <title>EchoWeave-RTC</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="EchoWeave home">
+        <span class="brand-mark">EW</span>
+        <span>
+          <strong>EchoWeave</strong>
+          <small>REALTIME CONVERSATION FABRIC</small>
+        </span>
+      </a>
+      <div class="top-actions">
+        <span class="safety-pill"><i></i> CONSENT-FIRST</span>
+        <a href="/docs" class="ghost-link" title="API docs">API</a>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="hero-copy">
+        <p class="eyebrow">AUTHORIZED DIGITAL PRESENCE</p>
+        <h1>让声音、思维与表情<br /><em>在同一条实时链路中流动。</em></h1>
+        <p class="intro">
+          EchoWeave-RTC 编排 VAD、ASR、LLM、TTS 与流式头像。
+          默认展示的是虚构角色 Echo；真人音色与形象必须通过服务端授权清单注册。
+        </p>
+      </section>
+
+      <section class="workspace" aria-label="Realtime agent workspace">
+        <div class="stage-card">
+          <div class="stage-toolbar">
+            <span id="connectionDot" class="connection-dot"></span>
+            <span id="stateLabel">未连接</span>
+            <span id="latencyLabel" class="metric">LOCAL DEMO</span>
+          </div>
+
+          <div class="stage" id="stage">
+            <div class="grid-lines" aria-hidden="true"></div>
+            <video id="avatarVideo" muted playsinline></video>
+            <div id="syntheticAvatar" class="avatar-shell" aria-label="Synthetic avatar">
+              <div class="halo halo-one"></div>
+              <div class="halo halo-two"></div>
+              <div class="face">
+                <span class="brow brow-left"></span>
+                <span class="brow brow-right"></span>
+                <span class="eye eye-left"></span>
+                <span class="eye eye-right"></span>
+                <span id="mouth" class="mouth"></span>
+              </div>
+              <div class="voice-rings">
+                <i></i><i></i><i></i><i></i><i></i>
+              </div>
+            </div>
+
+            <div class="identity">
+              <strong id="identityName">ECHO</strong>
+              <span id="identityType">虚构演示角色</span>
+            </div>
+            <div class="watermark">
+              <span>AI 数字分身</span>
+              <small>SYNTHETIC MEDIA · EW</small>
+            </div>
+          </div>
+
+          <div class="controls">
+            <div class="session-config">
+              <label>
+                <span>PERSONA ID</span>
+                <input
+                  id="personaInput"
+                  type="text"
+                  value="demo"
+                  maxlength="64"
+                  pattern="[a-z0-9_-]+"
+                  autocomplete="off"
+                />
+              </label>
+              <label>
+                <span>ACCESS TOKEN</span>
+                <input
+                  id="accessTokenInput"
+                  type="password"
+                  maxlength="512"
+                  placeholder="本地演示可留空"
+                  autocomplete="off"
+                />
+              </label>
+            </div>
+            <label class="acknowledgement">
+              <input id="disclosureAck" type="checkbox" />
+              <span>我知道对方是 AI 数字分身，不是真人</span>
+            </label>
+            <div class="button-row">
+              <button id="startButton" class="primary-button" type="button">
+                <span class="mic-icon"></span>
+                开始实时对话
+              </button>
+              <button id="cancelButton" class="icon-button" type="button" title="打断当前回答">
+                <span class="stop-icon"></span>
+              </button>
+            </div>
+            <div class="text-turn">
+              <input
+                id="textInput"
+                type="text"
+                maxlength="1000"
+                placeholder="也可以先输入文字测试整条链路…"
+              />
+              <button id="sendButton" type="button">发送</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="conversation-card">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">LIVE TRANSCRIPT</p>
+              <h2>实时会话</h2>
+            </div>
+            <button id="clearButton" class="clear-button" type="button">清空</button>
+          </div>
+          <div id="transcript" class="transcript" aria-live="polite">
+            <div class="system-note">
+              <span>系统</span>
+              <p>勾选 AI 身份提示后开始。麦克风不可用时仍可使用文字输入。</p>
+            </div>
+          </div>
+          <div class="pipeline-strip" aria-label="Active model pipeline">
+            <div><span>01</span><strong>VAD</strong><small>Silero v5</small></div>
+            <div><span>02</span><strong>ASR</strong><small>Qwen3</small></div>
+            <div><span>03</span><strong>LLM</strong><small>DeepSeek</small></div>
+            <div><span>04</span><strong>TTS</strong><small>VoxCPM2</small></div>
+            <div><span>05</span><strong>FACE</strong><small>SoulX</small></div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="assurance-grid">
+        <article>
+          <span>01</span>
+          <h3>可打断</h3>
+          <p>新语音触发 generation epoch，旧回答、音频和迟到视频帧立即失效。</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>可审计</h3>
+          <p>真人 persona 只能从带签名、有效期与素材哈希的服务端授权清单加载。</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>可降级</h3>
+          <p>GPU 头像不可用时自动回落到带永久标识的合成头像，语音链路继续工作。</p>
+        </article>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
