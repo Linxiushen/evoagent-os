@@ -4,6 +4,8 @@
 !README.md
 !LICENSE
 !NOTICE
+!constraints/
+!constraints/**
 !src/
 !src/**
 src/*.egg-info/

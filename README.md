@@ -1,23 +1,57 @@
 # EchoWeave-RTC
 
-EchoWeave-RTC 是一个“经本人授权、持续标识为 AI”的实时语音与数字头像
+EchoWeave-RTC 0.2 是一个“经本人授权、持续标识为 AI”的实时语音与数字头像
 Agent 编排框架。它把端点检测、语音识别、流式回答、语音合成、口型视频、
-打断和降级统一在一条可测试的会话链路里。
+打断、背压与可观测性统一在一条可测试的会话链路里。
 
-> 这个项目不支持秘密冒充真人。真人 persona 只能从带授权范围、有效期、
-> 素材哈希和服务端签名的清单加载；界面持续显示“AI 数字分身”。
+> **授权与披露是系统边界，不是可选文案。** 本项目不支持秘密复制、冒充或
+> 欺骗性再现真人。真人 persona 只能使用本人或合法权利人的明确授权素材，并
+> 从带授权范围、有效期、素材哈希和服务端签名的清单加载。浏览器和生成视频
+> 必须持续显示 AI / synthetic media 标识。
 
-## 当前实现
+## 0.2 能力概览
 
-- 自研 `EW` v1 二进制媒体包协议（PCM16 / MP4 segment）。
-- VAD 端点状态机、短 pre-roll、550ms 尾静音。
-- generation epoch 打断：取消 LLM/TTS/头像，清空浏览器播放队列。
-- DeepSeek V4 Flash SSE 流式客户端与中文语义分句。
-- Qwen3-ASR 本地适配器和 vLLM OpenAI transcription 适配器。
-- VoxCPM2 本地 `generate_streaming()` 与 vLLM-Omni 适配器。
-- Nuwa 离线准备 CLI、`SKILL.md` 加载、素材哈希与人工复核工作流。
-- 带 worker 鉴权、大小限制和服务端永久水印的 SoulX Lite bridge。
-- 完全无需 GPU/API key 的安全演示模式，便于验证端到端协议。
+- 自研 `EW` v1 WebSocket 控制与二进制媒体协议，支持版本和能力协商。
+- 每个服务端事件都有会话 ID、事件 ID、单调序号和服务端时间；错误带固定
+  分类、可重试标记和安全关联 ID。
+- VAD 端点状态机、短 pre-roll、550 ms 尾静音和 generation epoch 打断。
+- 有界语音短句队列、单写者 WebSocket 发送泵、客户端缓冲保护和慢消费者失败
+  隔离，避免无限排队。
+- ASR、LLM 首 token/空闲、TTS、头像、整轮、发送、取消和资源关闭均有截止时间。
+- 浏览器优先使用 AudioWorklet，把麦克风实时重采样为 16 kHz、20 ms PCM16 帧；
+  不支持时降级到 ScriptProcessor。
+- `turn.metrics` 返回首 token、文本完成和端到端耗时；网关提供有界 JSON 指标、
+  liveness、readiness 和并发压测/故障注入工具。
+- DeepSeek SSE、Qwen3-ASR、VoxCPM2、SoulX worker 均通过隔离适配器接入；
+  HTTP 连接复用且响应大小、类型和顺序受限。
+- Nuwa 只用于离线、经人工复核的 persona 提炼，不进入实时热路径，也不证明授权。
+- 完全无需 GPU 或 API key 的安全演示模式，可验证端到端协议与 UI。
+- 自适应实时控制台包含链路阶段、能力协商、网络 RTT、首字/整轮延迟、恢复动作、
+  键盘与屏幕阅读器支持；移动端保留加密状态并避免输入聚焦缩放。
+
+实时链路：
+
+```text
+AudioWorklet -> EW/PCM16 -> VAD -> Qwen ASR -> DeepSeek SSE
+                                            -> semantic chunks -> VoxCPM2
+                                                               -> SoulX
+                                                               -> bounded playout
+```
+
+## 真人数字分身需要什么输入
+
+虚构的 `demo` persona 不需要真人信息。创建真人数字分身至少需要下列**经本人
+授权**的输入，而且应只收集完成用途所需的最小数据：
+
+1. 经人工复核的 persona 资料或 `SKILL.md`；
+2. 明确列出对话、音色迁移、头像动画及第三方模型处理范围的授权记录；
+3. 经授权的面部参考素材；
+4. 经授权的干净声音参考和准确文本；
+5. 有效期、撤回机制、素材 SHA-256、审核/身份验证记录和服务端签名。
+
+实时会话只接受已注册的 `persona_id`，不接受访客临时上传陌生人的脸或声音。
+详细流程见[授权与安全边界](docs/SECURITY.md)和
+[Nuwa 离线工作流](docs/NUWA_WORKFLOW.md)。
 
 ## 六项组件的准确来源
 
@@ -27,7 +61,7 @@ Agent 编排框架。它把端点检测、语音识别、流式回答、语音�
 | ASR | [Qwen/Qwen3-ASR-1.7B](https://huggingface.co/Qwen/Qwen3-ASR-1.7B) |
 | 回答 | [DeepSeek API `deepseek-v4-flash`](https://api-docs.deepseek.com/) |
 | TTS / 授权音色 | [openbmb/VoxCPM2](https://huggingface.co/openbmb/VoxCPM2) |
-| 思维方法论提炼 | [alchaincyf/nuwa-skill](https://github.com/alchaincyf/nuwa-skill) |
+| Persona 方法论提炼 | [alchaincyf/nuwa-skill](https://github.com/alchaincyf/nuwa-skill) |
 | 口型和表情 | [Soul-AILab/SoulX-FlashHead-1_3B](https://huggingface.co/Soul-AILab/SoulX-FlashHead-1_3B) |
 
 Silero v5 在 Hugging Face 上没有官方同名仓库，第三方转换不作为默认来源；
@@ -44,20 +78,36 @@ python -m venv .venv
 .\.venv\Scripts\echoweave serve
 ```
 
-打开 [http://127.0.0.1:8765](http://127.0.0.1:8765)，勾选 AI 身份提示。
+打开 [http://127.0.0.1:8765](http://127.0.0.1:8765)，确认 AI 身份披露后开始。
 默认 demo 使用虚构角色、浏览器 TTS 和合成头像。文字输入可立即跑完整状态机；
-允许麦克风后也能验证 VAD、端点检测和 ASR 适配器边界。
+允许麦克风后可验证 AudioWorklet、VAD、端点检测和 ASR 边界。
 
-运行测试：
+健康与观测端点：
+
+| 路径 | 用途 |
+|---|---|
+| `/api/health`、`/api/health/live` | 进程 liveness；不代表模型依赖可用 |
+| `/api/ready`、`/api/health/ready` | 运行时适配器构造 readiness；未就绪返回 503 |
+| `/api/metrics` | 有界 JSON 指标；配置访问令牌后要求 Bearer 鉴权 |
+
+运行检查：
 
 ```powershell
 .\.venv\Scripts\python -m pytest -q
+node --check src/echoweave/web/app.js
+node --check src/echoweave/web/mic-worklet.js
+node tests/js/test_app_lifecycle.mjs
+node tests/js/test_frontend_contract.mjs
+node tests/js/test_mic_worklet.mjs
 ```
 
-仓库包含可直接复制到 `.github/workflows/` 的
+仓库包含可复制到 `.github/workflows/` 的
 [`ci/github-actions.yml`](ci/github-actions.yml) CI 模板。
 
-Docker Compose 会把网关监听在容器的所有接口，因此必须先生成访问令牌：
+## Docker Compose
+
+Compose 的网关进程监听容器内所有接口，因此必须先生成访问令牌；宿主机端口
+默认只发布到 `127.0.0.1`，公网部署应在前面使用 HTTPS/WSS 反向代理：
 
 ```powershell
 Copy-Item .env.example .env
@@ -68,15 +118,16 @@ docker compose up --build
 Write-Host "打开 http://127.0.0.1:8765/#token=$token"
 ```
 
-`.dockerignore` 使用构建上下文白名单，不会把 `.env`、真人素材、模型缓存或
-本地虚拟环境发送给 Docker builder。当前开发机未安装 Docker，因此本仓库已
-完成 Dockerfile/Compose 静态检查，但没有在这台机器上执行镜像构建。
+Compose 的容器健康检查使用 `/api/ready`，因此只有运行时适配器成功构造后才会
+进入 healthy。Compose 仅因宿主端口被硬绑定到 loopback，才显式开启私网明文
+例外；修改端口发布范围前必须移除此例外，并配置原生 TLS 或精确的可信代理
+IP/CIDR。应用仍会拒绝任何公网明文请求。`.dockerignore` 使用构建上下文白名单，
+不会把 `.env`、真人素材、模型缓存或本地虚拟环境发送给 Docker builder。
 
 ## 完整模型模式
 
-复制 `.env.example` 为 `.env`，按
-[部署文档](docs/DEPLOYMENT.md) 将 Qwen、VoxCPM2、SoulX 分别启动为 GPU
-worker，再选择：
+复制 `.env.example` 为 `.env`，按[部署文档](docs/DEPLOYMENT.md)将 Qwen、
+VoxCPM2、SoulX 分别启动为隔离 GPU worker，再选择：
 
 ```text
 ECHOWEAVE_VAD_BACKEND=silero_v5
@@ -86,32 +137,54 @@ ECHOWEAVE_TTS_BACKEND=voxcpm_http
 ECHOWEAVE_AVATAR_BACKEND=soulx_http
 ```
 
-DeepSeek key 只从服务端 `DEEPSEEK_API_KEY` 读取。不要把聊天里出现过的 key
-继续使用，也不要写进 `.env` 后提交。
+所有秘密只通过服务端环境变量或秘密管理器注入。DeepSeek key 只从
+`DEEPSEEK_API_KEY` 读取；任何曾出现在聊天、日志、工单或 Git 历史里的 key 都
+必须先撤销并轮换，不能继续使用，也不能提交 `.env`。
 
 启用真人 persona 时还要设置至少 32 字节的
-`ECHOWEAVE_CONSENT_SIGNING_KEY`；授权 revision 与永久撤回墓碑会写入
+`ECHOWEAVE_CONSENT_SIGNING_KEY`。授权 revision 与不可逆撤回墓碑写入
 `ECHOWEAVE_CONSENT_STATE_PATH`，该路径应放在持久、受备份保护的私有卷上。
+真人 persona 还强制要求独立的 `ECHOWEAVE_SESSION_SIGNING_KEY`；会话端只能
+提交由它签发的短期、一次性、绑定主体/persona/能力范围的 session token。
+共享 `ECHOWEAVE_ACCESS_TOKEN` 仅保留给 `demo`，不能访问任何真人 persona。
+对外绑定还必须配置精确的 `ECHOWEAVE_ALLOWED_ORIGINS`，真人 persona 必须
+显式加入 `ECHOWEAVE_ALLOWED_PERSONAS`。VoxCPM 与 SoulX 应分别使用
+`VOXCPM_WORKER_TOKEN` 和 `SOULX_WORKER_TOKEN`，网关会为每次调用签发绑定授权
+revision、scope、素材 SHA-256、audience、有效期和防重放 JTI 的 consent assertion。
 
-对外绑定时还必须设置 `ECHOWEAVE_ACCESS_TOKEN`；网页支持
-`#token=<value>&persona=<id>`，读取后会立即从地址栏移除片段。真人 persona
-必须显式加入 `ECHOWEAVE_ALLOWED_PERSONAS`。
+## 基准测试与生产声明
+
+`scripts/benchmark_realtime.py` 可并发测量连接就绪、首 token、文本完成和整轮
+p50/p95/p99，并可在隔离预发布环境注入延迟、非法控制消息和断线。示例：
+
+```powershell
+$env:ECHOWEAVE_ACCESS_TOKEN = "<staging-token>"
+.\.venv\Scripts\python scripts\benchmark_realtime.py `
+  --url ws://127.0.0.1:8765/ws --workers 4 --turns 10 `
+  --output runtime\benchmark-baseline.json
+```
+
+仓库中的 SLO 是初始目标，不是对任意硬件或模型组合的性能承诺。发布前应按
+[运维与 SLO 指南](docs/OPERATIONS.md)在同型号 GPU、固定语料与真实 worker 上
+建立至少七天的基线，并保留容量余量。
 
 ## 文档
 
-- [架构与打断](docs/ARCHITECTURE.md)
-- [媒体协议](docs/PROTOCOL.md)
+- [架构、背压与截止时间](docs/ARCHITECTURE.md)
+- [媒体与控制协议](docs/PROTOCOL.md)
 - [模型、许可证与硬件](docs/MODELS.md)
 - [完整部署](docs/DEPLOYMENT.md)
 - [授权与安全边界](docs/SECURITY.md)
 - [Nuwa 离线蒸馏与人工复核](docs/NUWA_WORKFLOW.md)
+- [运维、基准测试与 SLO](docs/OPERATIONS.md)
 - [真人 persona 注册](personas/README.md)
 
 ## 硬件
 
-当前开发机的 4 GB GPU 可以运行网关、测试和演示，但不能同时常驻
-Qwen3-ASR-1.7B、VoxCPM2 和 SoulX。完整本地实时链路建议让 ASR/TTS 使用
-一张较大显存 GPU，并让 SoulX Lite 独占一张 RTX 4090 24 GB 级 GPU。
+4 GB GPU 可以运行网关、测试和演示，但不能同时常驻 Qwen3-ASR-1.7B、
+VoxCPM2 和 SoulX。完整本地实时链路建议让 ASR/TTS 使用一张较大显存 GPU，
+并让 SoulX Lite 独占一张 RTX 4090 24 GB 级 GPU。具体显存需求取决于模型
+revision、精度、并发和 worker 实现，必须实测。
 
 ## License
 

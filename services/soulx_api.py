@@ -11,10 +11,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
-import hmac
 import importlib
 import json
 import logging
+import math
 import multiprocessing
 import os
 import shutil
@@ -34,12 +34,20 @@ from fastapi import (
     FastAPI,
     File,
     Form,
-    Header,
     HTTPException,
+    Request,
     UploadFile,
 )
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from echoweave.auth import (
+    ConsentAssertionClaims,
+    ReplayCache,
+    TokenValidationError,
+    authorize_consent_claims,
+    verify_consent_assertion,
+)
 
 LOGGER = logging.getLogger("echoweave.soulx_worker")
 
@@ -61,9 +69,15 @@ INFERENCE_TIMEOUT_SECONDS = int(
     os.environ.get("SOULX_INFERENCE_TIMEOUT_SECONDS", "1800")
 )
 MAX_REQUEST_BYTES = MAX_IMAGE_BYTES + MAX_AUDIO_BYTES + 2 * 1024 * 1024
+MAX_INFLIGHT_REQUESTS = int(os.environ.get("SOULX_MAX_INFLIGHT_REQUESTS", "1"))
+REQUEST_BODY_TIMEOUT_SECONDS = float(
+    os.environ.get("SOULX_REQUEST_BODY_TIMEOUT_SECONDS", "45")
+)
 
 INFERENCE_LOCK = asyncio.Lock()
 WORKER_QUARANTINED = False
+ASSERTION_REPLAY_CACHE = ReplayCache()
+_ASSERTION_SCOPE_KEY = "echoweave.worker_assertion_claims"
 
 app = FastAPI(
     title="EchoWeave SoulX Worker",
@@ -111,39 +125,98 @@ class _FinalizingStreamingResponse(StreamingResponse):
 
 
 def _configured_worker_token() -> str:
-    token = os.environ.get("MODEL_WORKER_TOKEN", "").strip()
+    token = os.environ.get("SOULX_WORKER_TOKEN", "").strip()
+    if not token:
+        token = os.environ.get("MODEL_WORKER_TOKEN", "").strip()
     return token if len(token.encode("utf-8")) >= 32 else ""
 
 
-def _tokens_match(supplied: str, expected: str) -> bool:
-    return hmac.compare_digest(
-        supplied.encode("utf-8"),
-        expected.encode("utf-8"),
-    )
+def _configured_worker_audience() -> str:
+    return os.environ.get(
+        "SOULX_WORKER_AUDIENCE",
+        "echoweave-soulx-worker",
+    ).strip()
 
 
-def _require_worker_token(
-    authorization: Annotated[str | None, Header()] = None,
-    x_worker_token: Annotated[str | None, Header()] = None,
-    x_echoweave_worker_token: Annotated[
-        str | None,
-        Header(alias="X-EchoWeave-Worker-Token"),
-    ] = None,
-) -> None:
+def _configured_assertion_max_ttl() -> int:
+    try:
+        value = int(os.environ.get("ECHOWEAVE_WORKER_ASSERTION_MAX_TTL_SECONDS", "300"))
+    except ValueError:
+        return 0
+    return value if 1 <= value <= 300 else 0
+
+
+def _verify_worker_assertion(
+    supplied: str,
+    *,
+    consume: bool,
+) -> ConsentAssertionClaims:
     expected = _configured_worker_token()
-    if not expected:
+    max_ttl = _configured_assertion_max_ttl()
+    audience = _configured_worker_audience()
+    if not expected or not audience or not max_ttl:
         raise HTTPException(
-            status_code=503, detail="Worker authentication is unavailable."
+            status_code=503,
+            detail="Worker authentication is unavailable.",
         )
-    supplied = x_worker_token or x_echoweave_worker_token or ""
-    if not supplied and authorization and authorization.lower().startswith("bearer "):
-        supplied = authorization[7:].strip()
-    if not supplied or not _tokens_match(supplied, expected):
+    try:
+        return verify_consent_assertion(
+            supplied,
+            expected,
+            audience=audience,
+            max_lifetime_seconds=max_ttl,
+            replay_cache=ASSERTION_REPLAY_CACHE,
+            consume=consume,
+        )
+    except (TokenValidationError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=401,
+            detail="Worker authentication failed.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+
+def _authorize_worker_request(
+    claims: ConsentAssertionClaims | None,
+    *,
+    reference_hashes: dict[str, str],
+) -> None:
+    if not isinstance(claims, ConsentAssertionClaims):
         raise HTTPException(
             status_code=401,
             detail="Worker authentication failed.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    try:
+        authorize_consent_claims(
+            claims,
+            required_scope="avatar_animation",
+            reference_hashes=reference_hashes,
+        )
+    except TokenValidationError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Consent assertion rejected.",
+        ) from exc
+
+
+def _require_worker_token(request: Request) -> ConsentAssertionClaims:
+    claims = request.scope.get(_ASSERTION_SCOPE_KEY)
+    supplied = _scope_worker_token(request.scope)
+    if not isinstance(claims, ConsentAssertionClaims) or not supplied:
+        raise HTTPException(
+            status_code=401,
+            detail="Worker authentication failed.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    verified = _verify_worker_assertion(supplied, consume=False)
+    if verified != claims:
+        raise HTTPException(
+            status_code=401,
+            detail="Worker authentication failed.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return claims
 
 
 def _scope_header_values(scope: Scope, name: bytes) -> list[str]:
@@ -188,37 +261,115 @@ async def _guard_response(
 
 
 class _BoundedAuthenticatedBody:
-    """Authenticate before reading, then buffer at most one bounded request body."""
+    """Authenticate, globally admit, then read one bounded body under a deadline."""
 
-    def __init__(self, app: ASGIApp, route_limits: dict[str, int]) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        route_limits: dict[str, int],
+        max_inflight: int,
+        body_timeout_seconds: float,
+    ) -> None:
         self.app = app
         self.route_limits = route_limits
+        self.max_inflight = max(1, min(max_inflight, 64))
+        self.body_timeout_seconds = (
+            max(0.1, min(body_timeout_seconds, 300.0))
+            if math.isfinite(body_timeout_seconds)
+            else 45.0
+        )
+        self._inflight = 0
+        self._admission_lock = asyncio.Lock()
+
+    async def _admit(self, supplied: str) -> ConsentAssertionClaims | None:
+        async with self._admission_lock:
+            if WORKER_QUARANTINED:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Worker is quarantined after an unsafe process shutdown.",
+                )
+            if self._inflight >= self.max_inflight:
+                return None
+            claims = _verify_worker_assertion(supplied, consume=True)
+            self._inflight += 1
+            return claims
+
+    async def _release(self) -> None:
+        async with self._admission_lock:
+            self._inflight = max(0, self._inflight - 1)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or scope.get("path") not in self.route_limits:
             await self.app(scope, receive, send)
             return
 
-        expected = _configured_worker_token()
-        if not expected:
-            await _guard_response(
-                scope,
-                receive,
-                send,
-                503,
-                "Worker authentication is unavailable.",
-            )
-            return
         supplied = _scope_worker_token(scope)
-        if not supplied or not _tokens_match(supplied, expected):
+        try:
+            if not supplied:
+                raise HTTPException(status_code=401)
+            _verify_worker_assertion(supplied, consume=False)
+        except HTTPException as exc:
             await _guard_response(
                 scope,
                 receive,
                 send,
-                401,
-                "Worker authentication failed.",
+                exc.status_code,
+                (
+                    "Worker authentication is unavailable."
+                    if exc.status_code == 503
+                    else "Worker authentication failed."
+                ),
             )
             return
+
+        try:
+            claims = await self._admit(supplied)
+        except HTTPException as exc:
+            await _guard_response(
+                scope,
+                receive,
+                send,
+                exc.status_code,
+                (
+                    "Worker authentication failed."
+                    if exc.status_code == 401
+                    else "Worker is unavailable."
+                ),
+            )
+            return
+        if claims is None:
+            await _guard_response(
+                scope,
+                receive,
+                send,
+                429,
+                "Worker request capacity is exhausted.",
+            )
+            return
+        try:
+            async with asyncio.timeout(self.body_timeout_seconds):
+                replay_receive = await self._read_body(scope, receive, send)
+            if replay_receive is not None:
+                admitted_scope = dict(scope)
+                admitted_scope[_ASSERTION_SCOPE_KEY] = claims
+                await self.app(admitted_scope, replay_receive, send)
+        except TimeoutError:
+            await _guard_response(
+                scope,
+                receive,
+                send,
+                408,
+                "Request body deadline exceeded.",
+            )
+        finally:
+            await self._release()
+
+    async def _read_body(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> Receive | None:
 
         limit = self.route_limits[scope["path"]]
         content_lengths = _scope_header_values(scope, b"content-length")
@@ -287,12 +438,14 @@ class _BoundedAuthenticatedBody:
                 return message
             return await receive()
 
-        await self.app(scope, replay_receive, send)
+        return replay_receive
 
 
 app.add_middleware(
     _BoundedAuthenticatedBody,
     route_limits={"/v1/avatar/stream": MAX_REQUEST_BYTES},
+    max_inflight=MAX_INFLIGHT_REQUESTS,
+    body_timeout_seconds=REQUEST_BODY_TIMEOUT_SECONDS,
 )
 
 
@@ -670,7 +823,10 @@ async def _next_child_message(connection, process, deadline: float):
 
 @app.post("/v1/avatar/stream")
 async def stream_avatar(
-    _authenticated: Annotated[None, Depends(_require_worker_token)],
+    assertion: Annotated[
+        ConsentAssertionClaims,
+        Depends(_require_worker_token),
+    ],
     image: Annotated[UploadFile, File()],
     audio: Annotated[UploadFile, File()],
     model_type: Annotated[str, Form()] = "lite",
@@ -703,6 +859,12 @@ async def stream_avatar(
     try:
         await _save_upload_limited(image, staged_image, MAX_IMAGE_BYTES)
         image_path = _validated_image_path(staged_image)
+        _authorize_worker_request(
+            assertion,
+            reference_hashes={
+                "image": hashlib.sha256(image_path.read_bytes()).hexdigest()
+            },
+        )
         await _save_upload_limited(audio, audio_path, MAX_AUDIO_BYTES)
         _validate_wav(audio_path)
         output_root = workdir / "gradio_results"

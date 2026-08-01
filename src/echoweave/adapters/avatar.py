@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import binascii
 import json
 from collections.abc import AsyncIterator
 
 import httpx
 
 from echoweave.adapters.asr import pcm16_to_wav
+from echoweave.adapters.http import (
+    ManagedAsyncClient,
+    iter_bounded_lines,
+    require_content_type,
+)
 from echoweave.contracts import AvatarSegment, PersonaProfile
 
 
@@ -58,10 +64,14 @@ class SoulXHTTPAvatar:
         base_url: str,
         worker_token: str = "",
         max_segment_bytes: int = 32 * 1024 * 1024,
+        max_response_bytes: int = 256 * 1024 * 1024,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.worker_token = worker_token
         self.max_segment_bytes = max_segment_bytes
+        self.max_response_bytes = max_response_bytes
+        self.max_line_bytes = 4 * ((max_segment_bytes + 2) // 3) + 16 * 1024
+        self._http = ManagedAsyncClient(httpx.Timeout(600.0, connect=15.0))
 
     async def animate(
         self,
@@ -98,32 +108,51 @@ class SoulXHTTPAvatar:
         headers = {}
         if self.worker_token:
             headers["X-Worker-Token"] = self.worker_token
-        timeout = httpx.Timeout(600.0, connect=15.0)
-        async with (
-            httpx.AsyncClient(timeout=timeout) as client,
-            client.stream(
-                "POST",
-                f"{self.base_url}/v1/avatar/stream",
-                headers=headers,
-                data=data,
-                files=files,
-            ) as response,
-        ):
+        client = await self._http.get()
+        async with client.stream(
+            "POST",
+            f"{self.base_url}/v1/avatar/stream",
+            headers=headers,
+            data=data,
+            files=files,
+        ) as response:
             response.raise_for_status()
-            async for line in response.aiter_lines():
+            require_content_type(
+                response,
+                {"application/ndjson", "application/x-ndjson"},
+                source="SoulX worker",
+            )
+            expected_index = 0
+            async for raw_line in iter_bounded_lines(
+                response,
+                max_line_bytes=self.max_line_bytes,
+                max_total_bytes=self.max_response_bytes,
+                source="SoulX worker",
+            ):
                 if cancel_event.is_set():
                     return
-                if not line:
+                if not raw_line:
                     continue
-                if len(line) > (self.max_segment_bytes * 4 // 3) + 4096:
-                    raise RuntimeError("SoulX worker returned an oversized segment")
-                payload = json.loads(line)
+                try:
+                    line = raw_line.decode("utf-8", errors="strict")
+                    payload = json.loads(line)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise RuntimeError("SoulX worker returned invalid NDJSON") from exc
+                if not isinstance(payload, dict):
+                    raise TypeError("SoulX worker returned an invalid event")
                 segment_data = payload.get("data_b64")
-                decoded = (
-                    base64.b64decode(segment_data, validate=True)
-                    if segment_data
-                    else None
-                )
+                if segment_data is not None and not isinstance(segment_data, str):
+                    raise RuntimeError("SoulX worker returned invalid segment data")
+                try:
+                    decoded = (
+                        base64.b64decode(segment_data, validate=True)
+                        if segment_data
+                        else None
+                    )
+                except (binascii.Error, ValueError) as exc:
+                    raise RuntimeError(
+                        "SoulX worker returned invalid segment data"
+                    ) from exc
                 if decoded and len(decoded) > self.max_segment_bytes:
                     raise RuntimeError("SoulX worker returned an oversized segment")
                 mime_type = payload.get("mime_type", "video/mp4")
@@ -131,12 +160,27 @@ class SoulXHTTPAvatar:
                     raise RuntimeError(
                         "SoulX worker returned an unsupported media type"
                     )
+                try:
+                    index = int(payload.get("index", -1))
+                    duration_ms = int(payload.get("duration_ms", 0))
+                except (TypeError, ValueError) as exc:
+                    raise RuntimeError(
+                        "SoulX worker returned invalid metadata"
+                    ) from exc
+                if index != expected_index:
+                    raise RuntimeError("SoulX worker returned an out-of-order segment")
+                if duration_ms < 0 or duration_ms > 60_000:
+                    raise RuntimeError("SoulX worker returned an invalid duration")
+                expected_index += 1
                 yield AvatarSegment(
                     kind="soulx_mp4",
-                    index=int(payload.get("index", 0)),
+                    index=index,
                     data=decoded,
                     url=None,
                     mime_type=mime_type,
-                    duration_ms=int(payload.get("duration_ms", 0)),
+                    duration_ms=duration_ms,
                     metadata={"synthetic": True, "watermark": "AI 数字分身"},
                 )
+
+    async def aclose(self) -> None:
+        await self._http.aclose()

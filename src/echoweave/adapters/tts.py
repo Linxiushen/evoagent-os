@@ -9,6 +9,11 @@ from pathlib import Path
 
 import httpx
 
+from echoweave.adapters.http import (
+    ManagedAsyncClient,
+    iter_bounded_raw,
+    require_content_type,
+)
 from echoweave.contracts import AudioFrame, PersonaProfile
 
 
@@ -68,12 +73,15 @@ class VoxCPM2HTTP:
         api_key: str = "EMPTY",
         sample_rate: int = 48_000,
         worker_token: str = "",
+        max_output_seconds: int = 120,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
         self.sample_rate = sample_rate
         self.worker_token = worker_token
+        self.max_output_bytes = sample_rate * 2 * max_output_seconds
+        self._http = ManagedAsyncClient(httpx.Timeout(300.0, connect=15.0))
 
     async def synthesize(
         self,
@@ -105,25 +113,65 @@ class VoxCPM2HTTP:
             body["ref_audio"] = f"data:{mime_type};base64,{encoded}"
         if persona.reference_voice_transcript:
             body["ref_text"] = persona.reference_voice_transcript
-        timeout = httpx.Timeout(300.0, connect=15.0)
-        async with (
-            httpx.AsyncClient(timeout=timeout) as client,
-            client.stream(
-                "POST",
-                f"{self.base_url}/audio/speech",
-                headers=headers,
-                json=body,
-            ) as response,
-        ):
+        client = await self._http.get()
+        async with client.stream(
+            "POST",
+            f"{self.base_url}/audio/speech",
+            headers=headers,
+            json=body,
+        ) as response:
             response.raise_for_status()
-            pts_ms = 0
-            async for chunk in response.aiter_bytes(8192):
+            require_content_type(
+                response,
+                {"application/octet-stream", "audio/l16", "audio/pcm"},
+                source="TTS worker",
+            )
+            announced_rate = response.headers.get("x-audio-sample-rate")
+            if announced_rate:
+                try:
+                    parsed_rate = int(announced_rate)
+                except ValueError as exc:
+                    raise RuntimeError(
+                        "TTS worker returned an invalid sample rate"
+                    ) from exc
+                if parsed_rate != self.sample_rate:
+                    raise RuntimeError(
+                        "TTS worker sample rate does not match configuration"
+                    )
+            emitted_bytes = 0
+            pending = b""
+            async for chunk in iter_bounded_raw(
+                response,
+                self.max_output_bytes,
+                source="TTS worker",
+            ):
                 if cancel_event.is_set():
                     return
-                if not chunk:
-                    continue
-                yield AudioFrame(chunk, self.sample_rate, pts_ms=pts_ms)
-                pts_ms += int(len(chunk) * 1000 / (self.sample_rate * 2))
+                offset = 0
+                if pending:
+                    pcm = pending + chunk[:1]
+                    pending = b""
+                    offset = 1
+                    pts_ms = int(emitted_bytes * 1000 / (self.sample_rate * 2))
+                    yield AudioFrame(pcm, self.sample_rate, pts_ms=pts_ms)
+                    emitted_bytes += len(pcm)
+                while offset + 1 < len(chunk):
+                    if cancel_event.is_set():
+                        return
+                    end = min(offset + 8192, len(chunk))
+                    end -= (end - offset) % 2
+                    pcm = bytes(memoryview(chunk)[offset:end])
+                    pts_ms = int(emitted_bytes * 1000 / (self.sample_rate * 2))
+                    yield AudioFrame(pcm, self.sample_rate, pts_ms=pts_ms)
+                    emitted_bytes += len(pcm)
+                    offset = end
+                if offset < len(chunk):
+                    pending = chunk[offset:]
+            if pending:
+                raise RuntimeError("TTS worker returned a truncated PCM16 sample")
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
 
 
 class VoxCPM2Local:

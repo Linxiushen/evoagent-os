@@ -8,11 +8,23 @@ class SemanticChunker:
     SOFT_ENDINGS = frozenset("，,：:")
 
     def __init__(self, min_chars: int = 8, max_chars: int = 48) -> None:
+        if isinstance(min_chars, bool) or not isinstance(min_chars, int):
+            raise TypeError("min_chars must be an integer")
+        if isinstance(max_chars, bool) or not isinstance(max_chars, int):
+            raise TypeError("max_chars must be an integer")
+        if min_chars < 1:
+            raise ValueError("min_chars must be positive")
+        if max_chars < min_chars:
+            raise ValueError("max_chars must be greater than or equal to min_chars")
         self.min_chars = min_chars
         self.max_chars = max_chars
         self._buffer = ""
 
     def push(self, delta: str) -> list[str]:
+        if not isinstance(delta, str):
+            raise TypeError("delta must be a string")
+        if not delta:
+            return []
         self._buffer += delta
         ready: list[str] = []
         while self._buffer:
@@ -31,8 +43,9 @@ class SemanticChunker:
         return phrase
 
     def _find_split(self) -> int | None:
+        search_end = min(len(self._buffer), self.max_chars)
         if len(self._buffer) >= self.min_chars:
-            for index, char in enumerate(self._buffer, start=1):
+            for index, char in enumerate(self._buffer[:search_end], start=1):
                 if char in self.STRONG_ENDINGS and index >= self.min_chars:
                     return index
         if len(self._buffer) >= self.max_chars:

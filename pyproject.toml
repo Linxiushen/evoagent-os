@@ -1,10 +1,12 @@
 [build-system]
-requires = ["setuptools>=69", "wheel"]
+# Exact build requirements make isolated PEP 517 wheel builds repeatable. Update
+# these deliberately together with the release constraints and artifact checks.
+requires = ["setuptools==83.0.0", "wheel==0.47.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "echoweave-rtc"
-version = "0.1.0"
+version = "0.2.0"
 description = "Consent-first realtime voice and digital-avatar agent orchestration."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -58,3 +60,4 @@ echoweave = ["web/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

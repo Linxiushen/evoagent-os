@@ -3,10 +3,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import io
+import json
 import wave
 
-import httpx
-
+from echoweave.adapters.http import (
+    ManagedAsyncClient,
+    read_bounded_body,
+    require_content_type,
+)
 from echoweave.contracts import Transcript
 
 
@@ -38,28 +42,54 @@ class Qwen3ASRHTTP:
         model: str = "Qwen/Qwen3-ASR-1.7B",
         api_key: str = "EMPTY",
         timeout_seconds: float = 120.0,
+        max_response_bytes: int = 1024 * 1024,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
         self.timeout_seconds = timeout_seconds
+        self.max_response_bytes = max_response_bytes
+        self._http = ManagedAsyncClient(timeout_seconds)
 
     async def transcribe(self, pcm16: bytes, sample_rate: int) -> Transcript:
         wav = pcm16_to_wav(pcm16, sample_rate)
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            response = await client.post(
-                f"{self.base_url}/audio/transcriptions",
-                headers=headers,
-                data={"model": self.model},
-                files={"file": ("speech.wav", wav, "audio/wav")},
-            )
+        client = await self._http.get()
+        async with client.stream(
+            "POST",
+            f"{self.base_url}/audio/transcriptions",
+            headers=headers,
+            data={"model": self.model},
+            files={"file": ("speech.wav", wav, "audio/wav")},
+        ) as response:
             response.raise_for_status()
-            payload = response.json()
+            require_content_type(
+                response,
+                {"application/json"},
+                source="ASR worker",
+            )
+            raw_payload = await read_bounded_body(
+                response,
+                self.max_response_bytes,
+                source="ASR worker",
+            )
+        try:
+            payload = json.loads(raw_payload)
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise RuntimeError("ASR worker returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            raise TypeError("ASR worker returned an invalid response")
+        raw_text = payload.get("text", "")
+        if not isinstance(raw_text, str):
+            raise TypeError("ASR worker returned a non-text transcript")
+        raw_language = payload.get("language")
         return Transcript(
-            text=str(payload.get("text", "")).strip(),
-            language=payload.get("language"),
+            text=raw_text.strip(),
+            language=raw_language if isinstance(raw_language, str) else None,
         )
+
+    async def aclose(self) -> None:
+        await self._http.aclose()
 
 
 class Qwen3ASRLocal:

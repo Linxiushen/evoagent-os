@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
-import hmac
+import hashlib
 import importlib.util
 import logging
+import math
 import os
 import queue
 import shutil
@@ -22,13 +23,21 @@ from fastapi import (
     FastAPI,
     File,
     Form,
-    Header,
     HTTPException,
+    Request,
     UploadFile,
 )
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from echoweave.auth import (
+    ConsentAssertionClaims,
+    ReplayCache,
+    TokenValidationError,
+    authorize_consent_claims,
+    verify_consent_assertion,
+)
 
 LOGGER = logging.getLogger("echoweave.voxcpm_worker")
 
@@ -41,14 +50,24 @@ MAX_REFERENCE_AUDIO_BYTES = int(
 MAX_OUTPUT_BYTES = int(os.environ.get("VOXCPM_MAX_OUTPUT_BYTES", "268435456"))
 MAX_ENCODED_REFERENCE_BYTES = ((MAX_REFERENCE_AUDIO_BYTES + 2) // 3) * 4
 MAX_REQUEST_BYTES = MAX_ENCODED_REFERENCE_BYTES + 2 * 1024 * 1024
+MAX_INFLIGHT_REQUESTS = int(os.environ.get("VOXCPM_MAX_INFLIGHT_REQUESTS", "2"))
+REQUEST_BODY_TIMEOUT_SECONDS = float(
+    os.environ.get("VOXCPM_REQUEST_BODY_TIMEOUT_SECONDS", "30")
+)
+PRODUCER_JOIN_TIMEOUT_SECONDS = float(
+    os.environ.get("VOXCPM_PRODUCER_JOIN_TIMEOUT_SECONDS", "10")
+)
 
 INFERENCE_LOCK = threading.Lock()
 MODEL_LOAD_LOCK = threading.Lock()
 MODEL = None
+WORKER_QUARANTINED = False
+ASSERTION_REPLAY_CACHE = ReplayCache()
+_ASSERTION_SCOPE_KEY = "echoweave.worker_assertion_claims"
 
 app = FastAPI(
     title="EchoWeave VoxCPM2 Worker",
-    version="0.1.0",
+    version="0.2.0",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
@@ -109,39 +128,99 @@ class SpeechRequest(BaseModel):
 
 
 def _configured_worker_token() -> str:
-    token = os.environ.get("MODEL_WORKER_TOKEN", "").strip()
+    token = os.environ.get("VOXCPM_WORKER_TOKEN", "").strip()
+    if not token:
+        token = os.environ.get("MODEL_WORKER_TOKEN", "").strip()
     return token if len(token.encode("utf-8")) >= 32 else ""
 
 
-def _tokens_match(supplied: str, expected: str) -> bool:
-    return hmac.compare_digest(
-        supplied.encode("utf-8"),
-        expected.encode("utf-8"),
-    )
+def _configured_worker_audience() -> str:
+    return os.environ.get(
+        "VOXCPM_WORKER_AUDIENCE",
+        "echoweave-voxcpm-worker",
+    ).strip()
 
 
-def _require_worker_token(
-    authorization: Annotated[str | None, Header()] = None,
-    x_worker_token: Annotated[str | None, Header()] = None,
-    x_echoweave_worker_token: Annotated[
-        str | None,
-        Header(alias="X-EchoWeave-Worker-Token"),
-    ] = None,
-) -> None:
+def _configured_assertion_max_ttl() -> int:
+    try:
+        value = int(os.environ.get("ECHOWEAVE_WORKER_ASSERTION_MAX_TTL_SECONDS", "300"))
+    except ValueError:
+        return 0
+    return value if 1 <= value <= 300 else 0
+
+
+def _verify_worker_assertion(
+    supplied: str,
+    *,
+    consume: bool,
+) -> ConsentAssertionClaims:
     expected = _configured_worker_token()
-    if not expected:
+    max_ttl = _configured_assertion_max_ttl()
+    audience = _configured_worker_audience()
+    if not expected or not audience or not max_ttl:
         raise HTTPException(
-            status_code=503, detail="Worker authentication is unavailable."
+            status_code=503,
+            detail="Worker authentication is unavailable.",
         )
-    supplied = x_worker_token or x_echoweave_worker_token or ""
-    if not supplied and authorization and authorization.lower().startswith("bearer "):
-        supplied = authorization[7:].strip()
-    if not supplied or not _tokens_match(supplied, expected):
+    try:
+        return verify_consent_assertion(
+            supplied,
+            expected,
+            audience=audience,
+            max_lifetime_seconds=max_ttl,
+            replay_cache=ASSERTION_REPLAY_CACHE,
+            consume=consume,
+        )
+    except (TokenValidationError, TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=401,
+            detail="Worker authentication failed.",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+
+def _authorize_worker_request(
+    claims: ConsentAssertionClaims | None,
+    *,
+    required_scope: str,
+    reference_hashes: dict[str, str],
+) -> None:
+    if not isinstance(claims, ConsentAssertionClaims):
         raise HTTPException(
             status_code=401,
             detail="Worker authentication failed.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    try:
+        authorize_consent_claims(
+            claims,
+            required_scope=required_scope,
+            reference_hashes=reference_hashes,
+        )
+    except TokenValidationError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Consent assertion rejected.",
+        ) from exc
+
+
+def _require_worker_token(request: Request) -> ConsentAssertionClaims:
+    claims = request.scope.get(_ASSERTION_SCOPE_KEY)
+    supplied = _scope_worker_token(request.scope)
+    if not isinstance(claims, ConsentAssertionClaims) or not supplied:
+        raise HTTPException(
+            status_code=401,
+            detail="Worker authentication failed.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    verified = _verify_worker_assertion(supplied, consume=False)
+    if verified != claims:
+        raise HTTPException(
+            status_code=401,
+            detail="Worker authentication failed.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return claims
 
 
 def _scope_header_values(scope: Scope, name: bytes) -> list[str]:
@@ -186,37 +265,115 @@ async def _guard_response(
 
 
 class _BoundedAuthenticatedBody:
-    """Authenticate before reading, then buffer at most one bounded request body."""
+    """Authenticate, globally admit, then read one bounded body under a deadline."""
 
-    def __init__(self, app: ASGIApp, route_limits: dict[str, int]) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        route_limits: dict[str, int],
+        max_inflight: int,
+        body_timeout_seconds: float,
+    ) -> None:
         self.app = app
         self.route_limits = route_limits
+        self.max_inflight = max(1, min(max_inflight, 64))
+        self.body_timeout_seconds = (
+            max(0.1, min(body_timeout_seconds, 300.0))
+            if math.isfinite(body_timeout_seconds)
+            else 30.0
+        )
+        self._inflight = 0
+        self._admission_lock = asyncio.Lock()
+
+    async def _admit(self, supplied: str) -> ConsentAssertionClaims | None:
+        async with self._admission_lock:
+            if WORKER_QUARANTINED:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Worker is quarantined after an unsafe model shutdown.",
+                )
+            if self._inflight >= self.max_inflight:
+                return None
+            claims = _verify_worker_assertion(supplied, consume=True)
+            self._inflight += 1
+            return claims
+
+    async def _release(self) -> None:
+        async with self._admission_lock:
+            self._inflight = max(0, self._inflight - 1)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http" or scope.get("path") not in self.route_limits:
             await self.app(scope, receive, send)
             return
 
-        expected = _configured_worker_token()
-        if not expected:
-            await _guard_response(
-                scope,
-                receive,
-                send,
-                503,
-                "Worker authentication is unavailable.",
-            )
-            return
         supplied = _scope_worker_token(scope)
-        if not supplied or not _tokens_match(supplied, expected):
+        try:
+            if not supplied:
+                raise HTTPException(status_code=401)
+            _verify_worker_assertion(supplied, consume=False)
+        except HTTPException as exc:
             await _guard_response(
                 scope,
                 receive,
                 send,
-                401,
-                "Worker authentication failed.",
+                exc.status_code,
+                (
+                    "Worker authentication is unavailable."
+                    if exc.status_code == 503
+                    else "Worker authentication failed."
+                ),
             )
             return
+
+        try:
+            claims = await self._admit(supplied)
+        except HTTPException as exc:
+            await _guard_response(
+                scope,
+                receive,
+                send,
+                exc.status_code,
+                (
+                    "Worker authentication failed."
+                    if exc.status_code == 401
+                    else "Worker is unavailable."
+                ),
+            )
+            return
+        if claims is None:
+            await _guard_response(
+                scope,
+                receive,
+                send,
+                429,
+                "Worker request capacity is exhausted.",
+            )
+            return
+        try:
+            async with asyncio.timeout(self.body_timeout_seconds):
+                replay_receive = await self._read_body(scope, receive, send)
+            if replay_receive is not None:
+                admitted_scope = dict(scope)
+                admitted_scope[_ASSERTION_SCOPE_KEY] = claims
+                await self.app(admitted_scope, replay_receive, send)
+        except TimeoutError:
+            await _guard_response(
+                scope,
+                receive,
+                send,
+                408,
+                "Request body deadline exceeded.",
+            )
+        finally:
+            await self._release()
+
+    async def _read_body(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> Receive | None:
 
         limit = self.route_limits[scope["path"]]
         content_lengths = _scope_header_values(scope, b"content-length")
@@ -285,7 +442,7 @@ class _BoundedAuthenticatedBody:
                 return message
             return await receive()
 
-        await self.app(scope, replay_receive, send)
+        return replay_receive
 
 
 app.add_middleware(
@@ -294,6 +451,8 @@ app.add_middleware(
         "/v1/audio/speech": MAX_REQUEST_BYTES,
         "/v1/audio/speech/clone": MAX_REQUEST_BYTES,
     },
+    max_inflight=MAX_INFLIGHT_REQUESTS,
+    body_timeout_seconds=REQUEST_BODY_TIMEOUT_SECONDS,
 )
 
 
@@ -303,6 +462,7 @@ def _dependency_status() -> dict[str, bool]:
         "numpy": importlib.util.find_spec("numpy") is not None,
         "torch": importlib.util.find_spec("torch") is not None,
         "authentication": bool(_configured_worker_token()),
+        "runtime_not_quarantined": not WORKER_QUARANTINED,
     }
     try:
         import torch
@@ -496,6 +656,8 @@ class _VoxStreamLifecycle:
             stop_event.set()
 
     def _close(self) -> None:
+        global WORKER_QUARANTINED
+
         with self._close_lock:
             with self._state_lock:
                 if self._closed:
@@ -506,11 +668,41 @@ class _VoxStreamLifecycle:
             if stop_event is not None:
                 stop_event.set()
             if producer is not None and producer_started:
-                producer.join()
-            if self.cleanup_root is not None:
+                timeout = (
+                    max(0.01, min(PRODUCER_JOIN_TIMEOUT_SECONDS, 300.0))
+                    if math.isfinite(PRODUCER_JOIN_TIMEOUT_SECONDS)
+                    else 10.0
+                )
+                producer.join(timeout=timeout)
+            producer_stuck = bool(
+                producer is not None and producer_started and producer.is_alive()
+            )
+            if producer_stuck:
+                WORKER_QUARANTINED = True
+                LOGGER.critical(
+                    "VoxCPM2 producer exceeded its shutdown deadline; "
+                    "the worker is quarantined until restart."
+                )
+                reaper = threading.Thread(
+                    target=self._reap_quarantined_producer,
+                    args=(producer, self.cleanup_root),
+                    name="echoweave-voxcpm-quarantine-reaper",
+                    daemon=True,
+                )
+                reaper.start()
+            elif self.cleanup_root is not None:
                 shutil.rmtree(self.cleanup_root, ignore_errors=True)
             with self._state_lock:
                 self._closed = True
+
+    @staticmethod
+    def _reap_quarantined_producer(
+        producer: threading.Thread,
+        cleanup_root: Path | None,
+    ) -> None:
+        producer.join()
+        if cleanup_root is not None:
+            shutil.rmtree(cleanup_root, ignore_errors=True)
 
     async def aclose(self) -> None:
         await asyncio.to_thread(self._close)
@@ -588,7 +780,7 @@ async def _pcm_stream(
             stop_event,
         ),
         name="echoweave-voxcpm-inference",
-        daemon=False,
+        daemon=True,
     )
     try:
         lifecycle.start(producer, stop_event)
@@ -620,6 +812,11 @@ def _streaming_response(
     prompt_text: str | None = None,
     cleanup_root: Path | None = None,
 ) -> StreamingResponse:
+    if WORKER_QUARANTINED:
+        raise HTTPException(
+            status_code=503,
+            detail="VoxCPM2 worker is quarantined after an unsafe model shutdown.",
+        )
     lifecycle = _VoxStreamLifecycle(cleanup_root)
     return _FinalizingStreamingResponse(
         _pcm_stream(
@@ -644,7 +841,10 @@ def _streaming_response(
 @app.post("/v1/audio/speech")
 async def speech(
     request: SpeechRequest,
-    _authenticated: Annotated[None, Depends(_require_worker_token)],
+    assertion: Annotated[
+        ConsentAssertionClaims,
+        Depends(_require_worker_token),
+    ],
 ) -> StreamingResponse:
     text = _validate_text(request.input, MAX_TEXT_CHARS, "Input text")
     if request.model != VOXCPM_MODEL:
@@ -665,6 +865,11 @@ async def speech(
                 status_code=400,
                 detail="Reference text requires reference audio.",
             )
+        _authorize_worker_request(
+            assertion,
+            required_scope="voice_synthesis",
+            reference_hashes={},
+        )
         return _streaming_response(text)
 
     normalized_prompt = (
@@ -675,6 +880,13 @@ async def speech(
     workdir = Path(tempfile.mkdtemp(prefix="echoweave-voxcpm-"))
     try:
         reference_path = _decode_reference_data_uri(request.ref_audio, workdir)
+        _authorize_worker_request(
+            assertion,
+            required_scope="voice_clone",
+            reference_hashes={
+                "voice": hashlib.sha256(reference_path.read_bytes()).hexdigest()
+            },
+        )
     except Exception:
         shutil.rmtree(workdir, ignore_errors=True)
         raise
@@ -688,7 +900,10 @@ async def speech(
 
 @app.post("/v1/audio/speech/clone")
 async def clone_speech(
-    _authenticated: Annotated[None, Depends(_require_worker_token)],
+    assertion: Annotated[
+        ConsentAssertionClaims,
+        Depends(_require_worker_token),
+    ],
     reference_audio: Annotated[UploadFile, File()],
     input: Annotated[str, Form()],
     reference_authorized: Annotated[bool, Form()],
@@ -719,6 +934,13 @@ async def clone_speech(
     reference_path = workdir / "reference.wav"
     try:
         await _save_reference_audio(reference_audio, reference_path)
+        _authorize_worker_request(
+            assertion,
+            required_scope="voice_clone",
+            reference_hashes={
+                "voice": hashlib.sha256(reference_path.read_bytes()).hexdigest()
+            },
+        )
     except Exception:
         shutil.rmtree(workdir, ignore_errors=True)
         raise

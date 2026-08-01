@@ -6,6 +6,12 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from echoweave.adapters.http import (
+    ManagedAsyncClient,
+    iter_bounded_lines,
+    require_content_type,
+)
+
 
 class DemoLLM:
     async def stream(
@@ -40,6 +46,9 @@ class DeepSeekV4Flash:
         model: str = "deepseek-v4-flash",
         thinking: str = "disabled",
         timeout_seconds: float = 120.0,
+        max_output_chars: int = 64_000,
+        max_sse_line_chars: int = 1024 * 1024,
+        max_response_bytes: int = 8 * 1024 * 1024,
     ) -> None:
         if not api_key:
             raise ValueError("DEEPSEEK_API_KEY is required for the DeepSeek backend")
@@ -48,12 +57,20 @@ class DeepSeekV4Flash:
         self.model = model
         self.thinking = thinking
         self.timeout_seconds = timeout_seconds
+        self.max_output_chars = max_output_chars
+        self.max_sse_line_chars = max_sse_line_chars
+        self.max_response_bytes = max_response_bytes
+        self._http = ManagedAsyncClient(
+            httpx.Timeout(timeout_seconds, connect=15.0),
+        )
 
     async def stream(
         self,
         messages: list[dict[str, str]],
         cancel_event: asyncio.Event,
     ) -> AsyncIterator[str]:
+        if cancel_event.is_set():
+            return
         body = {
             "model": self.model,
             "messages": messages,
@@ -65,20 +82,32 @@ class DeepSeekV4Flash:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        timeout = httpx.Timeout(self.timeout_seconds, connect=15.0)
-        async with (
-            httpx.AsyncClient(timeout=timeout) as client,
-            client.stream(
-                "POST",
-                f"{self.base_url}/chat/completions",
-                headers=headers,
-                json=body,
-            ) as response,
-        ):
+        client = await self._http.get()
+        async with client.stream(
+            "POST",
+            f"{self.base_url}/chat/completions",
+            headers=headers,
+            json=body,
+        ) as response:
             response.raise_for_status()
-            async for line in response.aiter_lines():
+            require_content_type(
+                response,
+                {"text/event-stream"},
+                source="DeepSeek",
+            )
+            output_chars = 0
+            async for raw_line in iter_bounded_lines(
+                response,
+                max_line_bytes=self.max_sse_line_chars,
+                max_total_bytes=self.max_response_bytes,
+                source="DeepSeek",
+            ):
                 if cancel_event.is_set():
                     return
+                try:
+                    line = raw_line.decode("utf-8", errors="strict")
+                except UnicodeDecodeError as exc:
+                    raise RuntimeError("DeepSeek returned invalid SSE text") from exc
                 if not line.startswith("data:"):
                     continue
                 data = line[5:].strip()
@@ -86,11 +115,28 @@ class DeepSeekV4Flash:
                     if data == "[DONE]":
                         return
                     continue
-                payload = json.loads(data)
+                try:
+                    payload = json.loads(data)
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError("DeepSeek returned invalid SSE JSON") from exc
+                if not isinstance(payload, dict):
+                    raise TypeError("DeepSeek returned an invalid SSE event")
                 choices = payload.get("choices") or []
                 if not choices:
                     continue
+                if not isinstance(choices, list) or not isinstance(choices[0], dict):
+                    raise TypeError("DeepSeek returned invalid streamed choices")
                 delta = choices[0].get("delta") or {}
+                if not isinstance(delta, dict):
+                    raise TypeError("DeepSeek returned invalid streamed delta")
                 content = delta.get("content")
                 if content:
-                    yield str(content)
+                    if not isinstance(content, str):
+                        raise RuntimeError("DeepSeek returned invalid streamed content")
+                    output_chars += len(content)
+                    if output_chars > self.max_output_chars:
+                        raise RuntimeError("DeepSeek output exceeded the safety limit")
+                    yield content
+
+    async def aclose(self) -> None:
+        await self._http.aclose()

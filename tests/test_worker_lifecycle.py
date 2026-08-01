@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import io
 import tempfile
 import threading
@@ -14,6 +15,23 @@ from starlette.requests import ClientDisconnect
 
 import services.soulx_api as soulx
 import services.voxcpm_api as voxcpm
+from echoweave.auth import ConsentAssertionClaims
+
+
+def _claims(scope: str, reference_hashes: dict[str, str]) -> ConsentAssertionClaims:
+    return ConsentAssertionClaims(
+        subject="fictional",
+        audience="worker-test",
+        issued_at=1,
+        expires_at=2,
+        jti="worker-test-jti-00000001",
+        persona_id="fictional",
+        consent_id="test-consent",
+        revision=1,
+        manifest_digest=hashlib.sha256(b"manifest").hexdigest(),
+        scopes=frozenset({scope}),
+        reference_hashes=reference_hashes,
+    )
 
 
 def _http_scope(spec_version: str) -> dict:
@@ -60,7 +78,13 @@ async def test_voxcpm_response_start_failure_removes_reference_audio(
             "data:audio/wav;base64," + base64.b64encode(wav_header).decode("ascii")
         ),
     )
-    response = await voxcpm.speech(request, None)
+    response = await voxcpm.speech(
+        request,
+        _claims(
+            "voice_clone",
+            {"voice": hashlib.sha256(wav_header).hexdigest()},
+        ),
+    )
 
     with pytest.raises(ClientDisconnect):
         await response(
@@ -91,7 +115,17 @@ async def test_soulx_response_start_failure_removes_uploaded_biometrics(
         io.BytesIO(b"RIFF\x04\x00\x00\x00WAVE"),
         filename="speech.wav",
     )
-    response = await soulx.stream_avatar(None, image, audio, "lite", "test")
+    image_bytes = b"\x89PNG\r\n\x1a\nimage"
+    response = await soulx.stream_avatar(
+        _claims(
+            "avatar_animation",
+            {"image": hashlib.sha256(image_bytes).hexdigest()},
+        ),
+        image,
+        audio,
+        "lite",
+        "test",
+    )
 
     with pytest.raises(ClientDisconnect):
         await response(
@@ -153,6 +187,55 @@ async def test_voxcpm_asgi23_disconnect_waits_for_producer_and_cleans(
         thread.name == "echoweave-voxcpm-inference" and thread.is_alive()
         for thread in threading.enumerate()
     )
+
+
+async def test_voxcpm_stuck_producer_cleanup_is_bounded_and_quarantines(
+    tmp_path,
+    monkeypatch,
+):
+    workdir = tmp_path / "voxcpm-stuck-private"
+    workdir.mkdir()
+    (workdir / "reference.wav").write_bytes(b"private voice")
+    release_producer = threading.Event()
+    producer_started = threading.Event()
+    stop_event = threading.Event()
+
+    def block_forever_without_observing_stop() -> None:
+        producer_started.set()
+        release_producer.wait()
+
+    producer = threading.Thread(
+        target=block_forever_without_observing_stop,
+        name="echoweave-voxcpm-test-stuck",
+        daemon=True,
+    )
+    lifecycle = voxcpm._VoxStreamLifecycle(workdir)
+    monkeypatch.setattr(voxcpm, "PRODUCER_JOIN_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(voxcpm, "WORKER_QUARANTINED", False)
+    lifecycle.start(producer, stop_event)
+    assert await asyncio.to_thread(producer_started.wait, 1)
+
+    try:
+        started = time.perf_counter()
+        await asyncio.wait_for(lifecycle.aclose(), timeout=0.5)
+        elapsed = time.perf_counter() - started
+
+        assert elapsed < 0.3
+        assert stop_event.is_set()
+        assert producer.is_alive()
+        assert voxcpm.WORKER_QUARANTINED is True
+        assert workdir.exists()
+        assert voxcpm._dependency_status()["runtime_not_quarantined"] is False
+        health = await voxcpm.health()
+        assert b'"ok":false' in health.body
+    finally:
+        release_producer.set()
+        producer.join(timeout=1)
+
+    deadline = time.monotonic() + 1
+    while workdir.exists() and time.monotonic() < deadline:
+        await asyncio.sleep(0.01)
+    assert not workdir.exists()
 
 
 @pytest.mark.parametrize("module", [voxcpm, soulx])
