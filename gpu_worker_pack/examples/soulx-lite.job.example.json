@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "run_id": "authorized-subject-avatar-lite-v1",
+  "mode": "soulx_lite",
+  "authorization": {
+    "record_id": "auth-record-001",
+    "record_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "status": "approved",
+    "subject_verified": true,
+    "authority_verified": true,
+    "approved_at": "2026-08-01T00:00:00Z",
+    "valid_until": "2030-08-01T00:00:00Z",
+    "scopes": ["avatar_animation"],
+    "allowed_processors": [
+      "Soul-AILab/SoulX-FlashHead-1_3B",
+      "facebook/wav2vec2-base-960h"
+    ]
+  },
+  "models": [
+    {
+      "id": "Soul-AILab/SoulX-FlashHead-1_3B",
+      "revision": "59119b6c681230c3eeee157e224ae1941746711e",
+      "path": "/models/SoulX-FlashHead-1_3B",
+      "snapshot": {
+        "path": "/private/echoweave/locks/SoulX-FlashHead-1_3B.snapshot.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    {
+      "id": "facebook/wav2vec2-base-960h",
+      "revision": "22aad52d435eb6dbaf354bdad9b0da84ce7d6156",
+      "path": "/models/wav2vec2-base-960h",
+      "snapshot": {
+        "path": "/private/echoweave/locks/wav2vec2-base-960h.snapshot.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ],
+  "source_repositories": [
+    {
+      "id": "Soul-AILab/SoulX-FlashHead",
+      "revision": "9bc03de06bb0de82cd6bc477804512ae06144bf2",
+      "path": "/opt/SoulX-FlashHead"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "authorization-record",
+      "role": "authorization_record",
+      "path": "/private/echoweave/job/authorization.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "application/json"
+    },
+    {
+      "id": "avatar-reference",
+      "role": "avatar_reference_png",
+      "path": "/private/echoweave/job/avatar-reference.png",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "image/png"
+    },
+    {
+      "id": "driving-audio",
+      "role": "driving_audio_wav",
+      "path": "/private/echoweave/job/driving-audio.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    }
+  ],
+  "execution": {
+    "gpu_index": 0,
+    "seed": 42,
+    "output_dir": "/private/echoweave/job/outputs/avatar-lite",
+    "output_filename": "avatar-lite.mp4"
+  }
+}

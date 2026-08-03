@@ -30,10 +30,20 @@ Corrections to common names:
 
 - Silero is CPU-friendly.
 - Qwen's BF16 weights alone are about 4 GB; vLLM needs additional memory.
-- VoxCPM2 officially reports about 8 GB VRAM and 48 kHz output.
+- VoxCPM2 inference officially reports about 8 GB VRAM and 48 kHz output.
+  This is not a training requirement: the official fine-tuning guide estimates
+  about 20 GB for VoxCPM2 LoRA and about 40 GB for full fine-tuning.
 - SoulX Lite's published realtime target is an RTX 4090-class 24 GB GPU. Its
   model repository is much larger than 4 GB and also needs wav2vec2.
 
 A 4 GB GPU can run the EchoWeave gateway and safety/demo path, but cannot host
 all three neural workers. The practical full local topology is one GPU for
 ASR/TTS and a dedicated 24 GB GPU for SoulX Lite.
+
+The pinned VoxCPM2 LoRA implementation has no CPU offload, FSDP/ZeRO,
+activation checkpointing or 4/8-bit weight-training path. Its custom
+accelerator moves the complete model to one device and uses bfloat16 autocast.
+For private, no-upload training, use an owned Linux or WSL2 host with an
+Ampere-or-newer 24 GB NVIDIA GPU. Keep zero-shot CPU cloning as the local
+fallback when that hardware is unavailable; do not treat it as a completed
+LoRA run.

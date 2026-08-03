@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "run_id": "authorized-subject-voice-baseline-v1",
+  "mode": "voxcpm2_zero_shot",
+  "authorization": {
+    "record_id": "auth-record-001",
+    "record_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "status": "approved",
+    "subject_verified": true,
+    "authority_verified": true,
+    "approved_at": "2026-08-01T00:00:00Z",
+    "valid_until": "2030-08-01T00:00:00Z",
+    "scopes": ["voice_clone"],
+    "allowed_processors": ["openbmb/VoxCPM2"]
+  },
+  "models": [
+    {
+      "id": "openbmb/VoxCPM2",
+      "revision": "bffb3df5a29440629464e5e839f4d214c8714c3d",
+      "path": "/models/VoxCPM2",
+      "snapshot": {
+        "path": "/private/echoweave/locks/VoxCPM2.snapshot.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ],
+  "source_repositories": [
+    {
+      "id": "OpenBMB/VoxCPM",
+      "revision": "616d3d3e630a9c96c2853250eef91b0f39dcd5fa",
+      "path": "/opt/VoxCPM"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "authorization-record",
+      "role": "authorization_record",
+      "path": "/private/echoweave/job/authorization.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "application/json"
+    },
+    {
+      "id": "voice-reference",
+      "role": "voice_reference_wav",
+      "path": "/private/echoweave/job/voice-reference.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "voice-reference-transcript",
+      "role": "voice_reference_transcript",
+      "path": "/private/echoweave/job/voice-reference.txt",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "text/plain"
+    },
+    {
+      "id": "synthesis-text",
+      "role": "synthesis_text",
+      "path": "/private/echoweave/job/synthesis-text.txt",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "text/plain"
+    }
+  ],
+  "execution": {
+    "gpu_index": 0,
+    "seed": 42,
+    "output_dir": "/private/echoweave/job/outputs/voice-baseline",
+    "output_filename": "voice-baseline.wav"
+  }
+}

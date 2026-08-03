@@ -173,7 +173,9 @@ $env:ECHOWEAVE_ACCESS_TOKEN = "<staging-token>"
 - [架构、背压与截止时间](docs/ARCHITECTURE.md)
 - [媒体与控制协议](docs/PROTOCOL.md)
 - [模型、许可证与硬件](docs/MODELS.md)
+- [VoxCPM2 训练可行性审计](docs/VOXCPM2_TRAINING_AUDIT.md)
 - [完整部署](docs/DEPLOYMENT.md)
+- [远程 GPU 复现、预检与模型验收](gpu_worker_pack/README.md)
 - [授权与安全边界](docs/SECURITY.md)
 - [Nuwa 离线蒸馏与人工复核](docs/NUWA_WORKFLOW.md)
 - [公开人物研究档案：峰哥亡命天涯](docs/research/fengge-wangmingtianya-public-profile.md)
@@ -186,6 +188,12 @@ $env:ECHOWEAVE_ACCESS_TOKEN = "<staging-token>"
 VoxCPM2 和 SoulX。完整本地实时链路建议让 ASR/TTS 使用一张较大显存 GPU，
 并让 SoulX Lite 独占一张 RTX 4090 24 GB 级 GPU。具体显存需求取决于模型
 revision、精度、并发和 worker 实现，必须实测。
+
+## Private VoxCPM2 training
+
+See [the private, reviewed VoxCPM2 training workflow](docs/VOXCPM2_PRIVATE_TRAINING.md)
+for Silero segmentation, Qwen transcription, subtitle or audio-only evidence,
+human review, trusted dataset-plan export and owned-GPU execution.
 
 ## License
 

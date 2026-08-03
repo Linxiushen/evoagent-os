@@ -46,6 +46,7 @@ silero-v5 = [
 [project.scripts]
 echoweave = "echoweave.cli:main"
 echoweave-consent = "echoweave.persona:main"
+echoweave-gpu-worker = "echoweave.gpu_worker:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

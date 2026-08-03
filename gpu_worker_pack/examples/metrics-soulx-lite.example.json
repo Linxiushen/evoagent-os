@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "run_id": "authorized-subject-avatar-lite-v1",
+  "evaluators": [
+    {
+      "name": "replace-with-pinned-avatar-evaluator",
+      "version": "replace-with-exact-version-or-revision",
+      "path": "/private/echoweave/evaluators/avatar-evaluator",
+      "artifact_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "metrics": {
+    "face_identity_cosine": 0.8,
+    "syncnet_lse_c": 6.0,
+    "fps": 25.0,
+    "rtf_p95": 0.9,
+    "dropped_frame_ratio": 0.0,
+    "watermark_present": true,
+    "human_review_pass": true,
+    "ai_disclosure_present": true
+  }
+}

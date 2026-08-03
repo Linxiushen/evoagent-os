@@ -1,0 +1,5 @@
+# Direct runtime versions admitted by the reproducible qualification pack.
+# Install the appropriate CUDA 12.8 torch wheel before applying this file.
+# Install VoxCPM itself from the audited Git checkout documented in README.md.
+torch==2.7.1
+soundfile==0.13.1
