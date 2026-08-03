@@ -71,6 +71,22 @@ or an equivalent reviewer may propose SHA updates, but a floating major tag
 must not replace those pins. Copy the template to `.github/workflows/ci.yml`
 only through a GitHub credential authorized to create workflow files.
 
+## Media acquisition executables
+
+`scripts/acquire_bilibili_video.py` invokes the exact yt-dlp and FFmpeg paths
+provided by the operator. Provision both from reviewed, immutable releases and
+verify their approved versions and SHA-256 digests before every acquisition.
+The acquisition manifest records the observed version and executable-file
+digest, but it does not compare either value with a trusted allowlist; recording
+an untrusted binary does not make it trusted.
+
+A console-launcher digest may not cover the Python package it imports, and a
+dynamically linked FFmpeg executable digest does not cover its shared libraries.
+Prefer reviewed self-contained artifacts; otherwise hash and sign a manifest of
+the complete package or runtime environment. Disable self-update, do not install
+floating replacements into an approved environment, and retain the approved
+digest record outside the mutable acquisition directory.
+
 ## Model and worker artifacts
 
 The audited full revisions are recorded in `docs/MODELS.md`. Download Hugging

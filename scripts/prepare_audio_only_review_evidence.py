@@ -17,6 +17,16 @@ from typing import Any
 SCHEMA_VERSION = 1
 KIND = "echoweave-audio-only-review-evidence"
 TRANSCRIPT_KIND = "echoweave-qwen-range-machine-transcript"
+TRANSCRIPT_SCHEMA_VERSIONS = {1, 2}
+TRANSCRIPT_V1_SEGMENT_KEYS = {
+    "clip_id",
+    "start_seconds",
+    "end_seconds",
+    "duration_seconds",
+    "language",
+    "text",
+}
+TRANSCRIPT_V2_SEGMENT_KEYS = TRANSCRIPT_V1_SEGMENT_KEYS | {"language_hint"}
 SAMPLE_RATE = 16_000
 MAX_JSON_BYTES = 64 * 1024 * 1024
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -139,12 +149,28 @@ def _number(value: Any, label: str) -> float:
     return number
 
 
+def _optional_language(value: Any, label: str) -> str | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or value != value.strip()
+        or "\x00" in value
+        or any(ord(character) < 32 for character in value)
+        or len(value) > 256
+    ):
+        raise AudioOnlyEvidenceError(f"{label} is invalid")
+    return value
+
+
 def _transcript_segments(
     payload: dict[str, Any], *, audio: dict[str, Any], duration: float
 ) -> list[dict[str, Any]]:
+    schema_version = payload.get("schema_version")
     if (
-        type(payload.get("schema_version")) is not int
-        or payload["schema_version"] != SCHEMA_VERSION
+        type(schema_version) is not int
+        or schema_version not in TRANSCRIPT_SCHEMA_VERSIONS
         or payload.get("kind") != TRANSCRIPT_KIND
     ):
         raise AudioOnlyEvidenceError("transcript is not Qwen range evidence")
@@ -171,6 +197,15 @@ def _transcript_segments(
         label = f"segments[{index}]"
         if not isinstance(raw, dict):
             raise AudioOnlyEvidenceError(f"{label} must be an object")
+        expected_keys = (
+            TRANSCRIPT_V1_SEGMENT_KEYS
+            if schema_version == 1
+            else TRANSCRIPT_V2_SEGMENT_KEYS
+        )
+        if set(raw) != expected_keys:
+            raise AudioOnlyEvidenceError(
+                f"{label} fields do not match Qwen transcript schema v{schema_version}"
+            )
         clip_id = raw.get("clip_id")
         if not isinstance(clip_id, str) or not CLIP_ID.fullmatch(clip_id):
             raise AudioOnlyEvidenceError(f"{label}.clip_id is invalid")
@@ -179,8 +214,20 @@ def _transcript_segments(
         seen.add(clip_id)
         start = _number(raw.get("start_seconds"), f"{label}.start_seconds")
         end = _number(raw.get("end_seconds"), f"{label}.end_seconds")
-        if start < 0 or not 3 <= end - start <= 30 or end > duration + 1e-6:
+        segment_duration = end - start
+        claimed_duration = _number(
+            raw.get("duration_seconds"), f"{label}.duration_seconds"
+        )
+        if (
+            start < 0
+            or not 3 <= segment_duration <= 30
+            or end > duration + 1e-6
+            or abs(claimed_duration - segment_duration) > 1 / SAMPLE_RATE
+        ):
             raise AudioOnlyEvidenceError(f"{label} range is invalid")
+        _optional_language(raw.get("language"), f"{label}.language")
+        if schema_version == 2:
+            _optional_language(raw.get("language_hint"), f"{label}.language_hint")
         text = raw.get("text")
         if not isinstance(text, str) or not text.strip() or "\x00" in text:
             raise AudioOnlyEvidenceError(f"{label}.text must be non-empty")

@@ -18,7 +18,8 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = 1
+RANGES_SCHEMA_VERSION = 1
+OUTPUT_SCHEMA_VERSION = 2
 KIND = "echoweave-qwen-range-machine-transcript"
 SAMPLE_RATE = 16_000
 MIN_CLIP_SECONDS = 3.0
@@ -50,7 +51,7 @@ OUTPUT_KEYS = {
     "device",
     "segments",
 }
-OUTPUT_SEGMENT_KEYS = {
+LEGACY_OUTPUT_SEGMENT_KEYS = {
     "clip_id",
     "start_seconds",
     "end_seconds",
@@ -58,6 +59,7 @@ OUTPUT_SEGMENT_KEYS = {
     "language",
     "text",
 }
+OUTPUT_SEGMENT_KEYS = LEGACY_OUTPUT_SEGMENT_KEYS | {"language_hint"}
 
 
 class QwenRangeTranscriptionError(ValueError):
@@ -270,10 +272,10 @@ def _parse_ranges(
     _strict_keys(payload, RANGES_KEYS, "ranges JSON")
     if (
         type(payload["schema_version"]) is not int
-        or payload["schema_version"] != SCHEMA_VERSION
+        or payload["schema_version"] != RANGES_SCHEMA_VERSION
     ):
         raise QwenRangeTranscriptionError(
-            f"ranges schema_version must be {SCHEMA_VERSION}"
+            f"ranges schema_version must be {RANGES_SCHEMA_VERSION}"
         )
     claimed_sha256 = payload["source_sha256"]
     if not isinstance(claimed_sha256, str) or not SHA256.fullmatch(claimed_sha256):
@@ -350,7 +352,7 @@ def _identity(
     device: str,
 ) -> dict[str, Any]:
     return {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": OUTPUT_SCHEMA_VERSION,
         "kind": KIND,
         "source_path": str(audio_binding["path"]),
         "source_sha256": audio_binding["sha256"],
@@ -374,6 +376,21 @@ def _validate_text_field(value: Any, label: str) -> str:
     return value.strip()
 
 
+def _validate_language_hint(value: Any, label: str) -> str | None:
+    if value is None:
+        return None
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or value != value.strip()
+        or "\x00" in value
+        or any(ord(character) < 32 for character in value)
+        or len(value) > 256
+    ):
+        raise QwenRangeTranscriptionError(f"{label} is invalid")
+    return value
+
+
 def _validate_existing_output(
     payload: dict[str, Any],
     *,
@@ -381,7 +398,17 @@ def _validate_existing_output(
     requested_segments: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     _strict_keys(payload, OUTPUT_KEYS, "existing output")
+    schema_version = payload["schema_version"]
+    if type(schema_version) is not int or schema_version not in {
+        1,
+        OUTPUT_SCHEMA_VERSION,
+    }:
+        raise QwenRangeTranscriptionError(
+            "existing output has an unsupported schema_version"
+        )
     for key, expected in identity.items():
+        if key == "schema_version":
+            continue
         if type(payload[key]) is not type(expected) or payload[key] != expected:
             raise QwenRangeTranscriptionError(
                 f"existing output has an incompatible {key} binding"
@@ -395,11 +422,14 @@ def _validate_existing_output(
         )
 
     validated: list[dict[str, Any]] = []
+    segment_keys = (
+        LEGACY_OUTPUT_SEGMENT_KEYS if schema_version == 1 else OUTPUT_SEGMENT_KEYS
+    )
     for index, raw_segment in enumerate(raw_segments):
         label = f"existing output segments[{index}]"
         if not isinstance(raw_segment, dict):
             raise QwenRangeTranscriptionError(f"{label} must be an object")
-        _strict_keys(raw_segment, OUTPUT_SEGMENT_KEYS, label)
+        _strict_keys(raw_segment, segment_keys, label)
         expected = requested_segments[index]
         for key in (
             "clip_id",
@@ -427,6 +457,13 @@ def _validate_existing_output(
                 **expected,
                 "language": language.strip() if isinstance(language, str) else None,
                 "text": _validate_text_field(raw_segment["text"], f"{label}.text"),
+                "language_hint": (
+                    None
+                    if schema_version == 1
+                    else _validate_language_hint(
+                        raw_segment["language_hint"], f"{label}.language_hint"
+                    )
+                ),
             }
         )
     return validated
@@ -547,7 +584,9 @@ def _load_model(model_path: Path, model_revision: str, device: str) -> Any:
         ) from exc
 
 
-def _transcribe_segment(model: Any, pcm: bytes) -> tuple[str | None, str]:
+def _transcribe_segment(
+    model: Any, pcm: bytes, language_hint: str | None
+) -> tuple[str | None, str]:
     try:
         import numpy as np
     except ImportError as exc:
@@ -556,7 +595,7 @@ def _transcribe_segment(model: Any, pcm: bytes) -> tuple[str | None, str]:
         ) from exc
     audio = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
     try:
-        results = model.transcribe(audio=(audio, SAMPLE_RATE), language=None)
+        results = model.transcribe(audio=(audio, SAMPLE_RATE), language=language_hint)
     except Exception as exc:
         raise QwenRangeTranscriptionError("Qwen ASR transcription failed") from exc
     if not isinstance(results, (list, tuple)) or len(results) != 1:
@@ -604,9 +643,11 @@ def transcribe_ranges(
     model_revision: str,
     output_path: Path,
     device: str = "cpu",
+    language: str | None = None,
 ) -> Path:
     model_id = _validate_identifier(model_id, "model ID")
     device = _validate_identifier(device, "device", max_length=128)
+    language_hint = _validate_language_hint(language, "language hint")
     if not isinstance(model_revision, str) or not MODEL_REVISION.fullmatch(
         model_revision
     ):
@@ -660,10 +701,17 @@ def transcribe_ranges(
         _verify_file_unchanged(audio_binding, "source audio")
         _verify_file_unchanged(ranges_binding, "ranges JSON")
         pcm = _read_segment_pcm(audio_binding["path"], segment)
-        language, text = _transcribe_segment(model, pcm)
+        detected_language, text = _transcribe_segment(model, pcm, language_hint)
         _verify_file_unchanged(audio_binding, "source audio")
         _verify_file_unchanged(ranges_binding, "ranges JSON")
-        completed_segments.append({**segment, "language": language, "text": text})
+        completed_segments.append(
+            {
+                **segment,
+                "language": detected_language,
+                "text": text,
+                "language_hint": language_hint,
+            }
+        )
         output_digest = _atomic_checkpoint(
             output,
             payload,
@@ -687,6 +735,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--model-revision", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument(
+        "--language",
+        help="Optional Qwen decoding language hint recorded on every new segment.",
+    )
     return parser
 
 
@@ -701,6 +753,7 @@ def main() -> int:
             model_revision=args.model_revision,
             output_path=args.output,
             device=args.device,
+            language=args.language,
         )
     except (OSError, QwenRangeTranscriptionError) as exc:
         raise SystemExit(f"Qwen range transcription failed: {exc}") from exc

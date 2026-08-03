@@ -4,6 +4,7 @@ import hashlib
 import http.client
 import importlib.util
 import json
+import re
 import sys
 import threading
 import wave
@@ -427,3 +428,150 @@ def test_loopback_http_auth_csrf_audio_whitelist_and_decision_api(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_queue_scoped_cookies_do_not_authenticate_other_review_servers(tmp_path):
+    server_a = MODULE.create_server(
+        queue_path=_queue(tmp_path / "queue-a", clip_count=1),
+        decisions_path=tmp_path / "decisions-a.json",
+        access_token="a" * 32,
+        csrf_token="c" * 32,
+    )
+    server_b = MODULE.create_server(
+        queue_path=_queue(tmp_path / "queue-b", clip_count=2),
+        decisions_path=tmp_path / "decisions-b.json",
+        access_token="b" * 32,
+        csrf_token="d" * 32,
+    )
+    assert server_a.cookie_name != server_b.cookie_name
+    assert re.fullmatch(
+        rf"{MODULE.COOKIE_NAME_PREFIX}{server_a.queue.sha256[:8]}_[0-9a-f]{{16}}",
+        server_a.cookie_name,
+    )
+    assert re.fullmatch(
+        rf"{MODULE.COOKIE_NAME_PREFIX}{server_b.queue.sha256[:8]}_[0-9a-f]{{16}}",
+        server_b.cookie_name,
+    )
+
+    thread_a = threading.Thread(target=server_a.serve_forever, daemon=True)
+    thread_b = threading.Thread(target=server_b.serve_forever, daemon=True)
+    thread_a.start()
+    thread_b.start()
+    connection_a = http.client.HTTPConnection(
+        "127.0.0.1", server_a.server_port, timeout=5
+    )
+    connection_b = http.client.HTTPConnection(
+        "127.0.0.1", server_b.server_port, timeout=5
+    )
+    try:
+        status, headers, _ = _request(
+            connection_a, "GET", f"/login?token={server_a.access_token}"
+        )
+        assert status == 303
+        cookie_a = headers["set-cookie"].split(";", 1)[0]
+        assert cookie_a.startswith(f"{server_a.cookie_name}=")
+
+        status, headers, _ = _request(
+            connection_b, "GET", f"/login?token={server_b.access_token}"
+        )
+        assert status == 303
+        cookie_b = headers["set-cookie"].split(";", 1)[0]
+        assert cookie_b.startswith(f"{server_b.cookie_name}=")
+
+        status, _, _ = _request(
+            connection_a, "GET", "/api/queue", headers={"Cookie": cookie_a}
+        )
+        assert status == 200
+        status, _, _ = _request(
+            connection_b, "GET", "/api/queue", headers={"Cookie": cookie_b}
+        )
+        assert status == 200
+
+        status, _, _ = _request(
+            connection_a, "GET", "/api/queue", headers={"Cookie": cookie_b}
+        )
+        assert status == 401
+        status, _, _ = _request(
+            connection_b, "GET", "/api/queue", headers={"Cookie": cookie_a}
+        )
+        assert status == 401
+    finally:
+        connection_a.close()
+        connection_b.close()
+        server_a.shutdown()
+        server_b.shutdown()
+        server_a.server_close()
+        server_b.server_close()
+        thread_a.join(timeout=5)
+        thread_b.join(timeout=5)
+
+
+def test_same_queue_servers_do_not_share_a_cookie_scope(tmp_path):
+    queue_path = _queue(tmp_path / "shared-queue", clip_count=1)
+    server_a = MODULE.create_server(
+        queue_path=queue_path,
+        decisions_path=tmp_path / "decisions-a.json",
+        access_token="a" * 32,
+        csrf_token="c" * 32,
+    )
+    server_b = MODULE.create_server(
+        queue_path=queue_path,
+        decisions_path=tmp_path / "decisions-b.json",
+        access_token="b" * 32,
+        csrf_token="d" * 32,
+    )
+    assert server_a.queue.sha256 == server_b.queue.sha256
+    assert server_a.cookie_name != server_b.cookie_name
+
+    thread_a = threading.Thread(target=server_a.serve_forever, daemon=True)
+    thread_b = threading.Thread(target=server_b.serve_forever, daemon=True)
+    thread_a.start()
+    thread_b.start()
+    connection_a = http.client.HTTPConnection(
+        "127.0.0.1", server_a.server_port, timeout=5
+    )
+    connection_b = http.client.HTTPConnection(
+        "127.0.0.1", server_b.server_port, timeout=5
+    )
+    try:
+        status, headers, _ = _request(
+            connection_a, "GET", f"/login?token={server_a.access_token}"
+        )
+        assert status == 303
+        cookie_a = headers["set-cookie"].split(";", 1)[0]
+
+        status, headers, _ = _request(
+            connection_b, "GET", f"/login?token={server_b.access_token}"
+        )
+        assert status == 303
+        cookie_b = headers["set-cookie"].split(";", 1)[0]
+        combined_cookies = f"{cookie_a}; {cookie_b}"
+
+        status, _, _ = _request(
+            connection_a,
+            "GET",
+            "/api/queue",
+            headers={"Cookie": combined_cookies},
+        )
+        assert status == 200
+        status, _, _ = _request(
+            connection_b,
+            "GET",
+            "/api/queue",
+            headers={"Cookie": combined_cookies},
+        )
+        assert status == 200
+
+        status, _, _ = _request(
+            connection_b, "GET", "/api/queue", headers={"Cookie": cookie_a}
+        )
+        assert status == 401
+    finally:
+        connection_a.close()
+        connection_b.close()
+        server_a.shutdown()
+        server_b.shutdown()
+        server_a.server_close()
+        server_b.server_close()
+        thread_a.join(timeout=5)
+        thread_b.join(timeout=5)

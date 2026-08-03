@@ -88,13 +88,14 @@ class FakeModel:
         self.mutate = mutate
         self.calls = 0
         self.frame_counts: list[int] = []
+        self.language_hints: list[str | None] = []
 
     def transcribe(self, *, audio, language):
-        assert language is None
         samples, sample_rate = audio
         assert sample_rate == MODULE.SAMPLE_RATE
         self.calls += 1
         self.frame_counts.append(len(samples))
+        self.language_hints.append(language)
         if self.mutate is not None:
             self.mutate(self.calls)
         if self.fail_at == self.calls:
@@ -147,6 +148,7 @@ def test_transcribes_each_range_and_writes_provenance(tmp_path, monkeypatch):
 
     assert result == paths["output"].resolve()
     payload = json.loads(result.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == MODULE.OUTPUT_SCHEMA_VERSION
     assert payload["kind"] == MODULE.KIND
     assert payload["source_path"] == str(paths["audio"].resolve())
     assert payload["source_sha256"] == _digest(paths["audio"])
@@ -162,6 +164,7 @@ def test_transcribes_each_range_and_writes_provenance(tmp_path, monkeypatch):
         "clip-003",
     ]
     assert all(item["language"] == "Chinese" for item in payload["segments"])
+    assert all(item["language_hint"] is None for item in payload["segments"])
     assert all(item["text"] for item in payload["segments"])
     assert model.frame_counts == [48_000, 48_000, 48_000]
     assert not list(tmp_path.glob(".transcript.json.*.tmp"))
@@ -192,6 +195,50 @@ def test_failure_checkpoints_exact_prefix_and_resume_only_processes_suffix(
         "clip-003",
     ]
     assert resumed_model.calls == 2
+
+
+def test_language_hint_is_passed_to_qwen_and_recorded_per_segment(
+    tmp_path, monkeypatch
+):
+    paths = _fixture(tmp_path)
+    model = FakeModel()
+
+    _run(paths, monkeypatch, model=model, language="Chinese")
+
+    payload = json.loads(paths["output"].read_text(encoding="utf-8"))
+    assert model.language_hints == ["Chinese", "Chinese", "Chinese"]
+    assert [item["language_hint"] for item in payload["segments"]] == [
+        "Chinese",
+        "Chinese",
+        "Chinese",
+    ]
+
+
+def test_legacy_prefix_migrates_without_mislabeling_decode_language(
+    tmp_path, monkeypatch
+):
+    paths = _fixture(tmp_path)
+    first_model = FakeModel(fail_at=2)
+    with pytest.raises(MODULE.QwenRangeTranscriptionError):
+        _run(paths, monkeypatch, model=first_model)
+
+    legacy = json.loads(paths["output"].read_text(encoding="utf-8"))
+    legacy["schema_version"] = 1
+    for segment in legacy["segments"]:
+        segment.pop("language_hint")
+    _write_json(paths["output"], legacy)
+
+    resumed_model = FakeModel()
+    _run(paths, monkeypatch, model=resumed_model, language="Chinese")
+
+    migrated = json.loads(paths["output"].read_text(encoding="utf-8"))
+    assert migrated["schema_version"] == MODULE.OUTPUT_SCHEMA_VERSION
+    assert [item["language_hint"] for item in migrated["segments"]] == [
+        None,
+        "Chinese",
+        "Chinese",
+    ]
+    assert resumed_model.language_hints == ["Chinese", "Chinese"]
 
 
 def test_completed_output_returns_without_loading_qwen(tmp_path, monkeypatch):

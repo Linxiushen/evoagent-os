@@ -27,7 +27,7 @@ QUEUE_KIND = "echoweave-voxcpm2-manual-review-queue"
 DECISIONS_KIND = "echoweave-voxcpm2-review-decisions"
 BURNED_SUBTITLE_KIND = "echoweave-burned-subtitle-review-evidence"
 AUDIO_ONLY_KIND = "echoweave-audio-only-review-evidence"
-COOKIE_NAME = "echoweave_review_session"
+COOKIE_NAME_PREFIX = "echoweave_review_"
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
 MAX_DECISIONS_BYTES = 4 * 1024 * 1024
 MAX_REQUEST_BYTES = 32 * 1024
@@ -675,6 +675,9 @@ class ReviewHTTPServer(ThreadingHTTPServer):
         self.decisions = decisions
         self.access_token = access_token
         self.csrf_token = csrf_token
+        self.cookie_name = (
+            f"{COOKIE_NAME_PREFIX}{queue.sha256[:8]}_{secrets.token_hex(8)}"
+        )
         super().__init__(address, ReviewRequestHandler)
 
     @property
@@ -764,7 +767,7 @@ class ReviewRequestHandler(BaseHTTPRequestHandler):
         raw_cookie = self.headers.get("Cookie", "")
         try:
             cookie = SimpleCookie(raw_cookie)
-            morsel = cookie.get(COOKIE_NAME)
+            morsel = cookie.get(self.server.cookie_name)
         except CookieError:
             return False
         return bool(
@@ -864,7 +867,7 @@ class ReviewRequestHandler(BaseHTTPRequestHandler):
             headers={
                 "Location": "/",
                 "Set-Cookie": (
-                    f"{COOKIE_NAME}={self.server.access_token}; "
+                    f"{self.server.cookie_name}={self.server.access_token}; "
                     "Path=/; HttpOnly; SameSite=Strict"
                 ),
             },

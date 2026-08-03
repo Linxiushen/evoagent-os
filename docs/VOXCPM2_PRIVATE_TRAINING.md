@@ -28,6 +28,43 @@ literal is supplied to the trusted exporter. Missing, unknown or conflicting
 values fail closed. The later GPU-worker job applies its stricter identity,
 authority, validity, scope and processor checks.
 
+### Optional controlled Bilibili acquisition
+
+When an authorized source is one anonymously accessible public Bilibili video,
+acquire it into a new private directory before producing the 16 kHz WAV:
+
+```powershell
+$YtDlp = (Get-Command yt-dlp).Source
+$AcquisitionRoot = "$PrivateRoot\source-01-acquisition"
+$SourceUrl = 'https://www.bilibili.com/video/BVxxxxxxxxxx/'
+$UploaderId = '<numeric UID from the reviewed authorization record>'
+
+& $Python scripts\acquire_bilibili_video.py `
+  --url $SourceUrl --expected-uploader-id $UploaderId `
+  --authorization $Authorization --output $AcquisitionRoot `
+  --yt-dlp $YtDlp --ffmpeg $Ffmpeg
+
+$Acquisition = Get-Content "$AcquisitionRoot\acquisition-manifest.json" -Raw |
+  ConvertFrom-Json
+$SourceMedia = Join-Path $AcquisitionRoot $Acquisition.artifacts.media.path
+& $Ffmpeg -nostdin -hide_banner -loglevel error -n `
+  -i $SourceMedia -map 0:a:0 -vn -ac 1 -ar 16000 -c:a pcm_s16le $Audio
+```
+
+Obtain the numeric uploader UID independently from the reviewed authorization;
+do not copy it from downloader output after the fact. The acquisition tool
+accepts only one anonymous public video, ignores local yt-dlp configuration and
+plugins, uses no cookies, and rejects playlists, live media and DRM. Its output
+directory must not already exist. It publishes `source.<ext>`, allowlisted
+metadata and an acquisition manifest, so read the media filename from that
+manifest instead of assuming MP4.
+
+The tool only hash-binds the supplied authorization artifact; it does not prove
+that its claims are valid, and public availability is not permission to clone a
+person. Retain the acquisition manifest as audit evidence. Downstream tools
+independently bind the derived WAV and do not currently consume that manifest,
+so this optional conversion is not an enforced end-to-end derivation chain.
+
 ## 2. Silero ranges and Qwen transcript
 
 Run this sequence once per source WAV, using globally unique clip prefixes:
@@ -44,19 +81,27 @@ $Transcript = "$PrivateRoot\source-01.qwen.json"
   --audio $Audio --ranges $Ranges --model-path $Qwen `
   --model-id Qwen/Qwen3-ASR-1.7B `
   --model-revision 7278e1e70fe206f11671096ffdd38061171dd6e5 `
-  --output $Transcript --device cpu
+  --output $Transcript --device cpu --language Chinese
 ```
 
-Each candidate must be 3-30 seconds. Qwen output is still unverified text.
+Each candidate must be 3-30 seconds. Use `--language Chinese` only when Chinese
+is the reviewed decoding hint; omit it to let Qwen select the language. New
+transcripts use schema v2: each segment's `language_hint` records the requested
+hint, while `language` records the model result. The hint applies only to newly
+processed segments. A complete v1 checkpoint remains accepted and unchanged; a
+partial v1 checkpoint upgrades on its next write, with `language_hint=null` for
+its legacy prefix. Use a new output file to retranscribe every segment under a
+different hint. Qwen output is still unverified text.
 
 ## 3. Subtitle evidence or audio-only evidence
 
-For a source video with burned subtitles, align OCR to the Qwen output:
+For a source video with burned subtitles, set `$SourceMedia` to that video (the
+optional acquisition above already does this), then align OCR to the Qwen output:
 
 ```powershell
 $OcrEvidence = "$PrivateRoot\source-01.ocr.json"
 & $Python scripts\ocr_burned_subtitles.py `
-  --input "$PrivateRoot\source-01.mp4" `
+  --input $SourceMedia `
   --segments $Transcript --output $OcrEvidence `
   --ffmpeg $Ffmpeg --samples-per-segment 3
 ```

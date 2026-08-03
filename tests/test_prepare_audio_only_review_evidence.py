@@ -33,24 +33,31 @@ def _write_wav(path: Path, seconds: int = 10) -> None:
         stream.writeframes(b"\x10\x00" * MODULE.SAMPLE_RATE * seconds)
 
 
-def _write_transcript(path: Path, audio: Path) -> None:
+def _write_transcript(
+    path: Path,
+    audio: Path,
+    *,
+    schema_version: int = 1,
+    language_hint: object = "Chinese",
+) -> None:
+    segment = {
+        "clip_id": "clip-0001",
+        "start_seconds": 1.0,
+        "end_seconds": 5.0,
+        "duration_seconds": 4.0,
+        "language": "Chinese",
+        "text": "Machine transcript.",
+    }
+    if schema_version == 2:
+        segment["language_hint"] = language_hint
     path.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": schema_version,
                 "kind": MODULE.TRANSCRIPT_KIND,
                 "source_path": str(audio.resolve()),
                 "source_sha256": _digest(audio),
-                "segments": [
-                    {
-                        "clip_id": "clip-0001",
-                        "start_seconds": 1.0,
-                        "end_seconds": 5.0,
-                        "duration_seconds": 4.0,
-                        "language": "Chinese",
-                        "text": "Machine transcript.",
-                    }
-                ],
+                "segments": [segment],
             },
             ensure_ascii=False,
         )
@@ -91,6 +98,76 @@ def test_prepares_explicit_audio_only_evidence(tmp_path: Path) -> None:
             "caption_count": 0,
         }
     ]
+
+
+@pytest.mark.parametrize("language_hint", [None, "Chinese"], ids=["auto", "explicit"])
+def test_accepts_language_hint_aware_qwen_v2_transcript(
+    tmp_path: Path, language_hint: str | None
+) -> None:
+    audio = tmp_path / "source.wav"
+    transcript = tmp_path / "transcript.json"
+    output = tmp_path / "evidence.json"
+    _write_wav(audio)
+    _write_transcript(transcript, audio, schema_version=2, language_hint=language_hint)
+
+    MODULE.prepare_audio_only_evidence(
+        audio_path=audio, transcript_path=transcript, output_path=output
+    )
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["segments"]["sha256"] == _digest(transcript)
+
+
+def test_rejects_unknown_qwen_transcript_schema(tmp_path: Path) -> None:
+    audio = tmp_path / "source.wav"
+    transcript = tmp_path / "transcript.json"
+    _write_wav(audio)
+    _write_transcript(transcript, audio, schema_version=3)
+
+    with pytest.raises(MODULE.AudioOnlyEvidenceError, match="Qwen range evidence"):
+        MODULE.prepare_audio_only_evidence(
+            audio_path=audio,
+            transcript_path=transcript,
+            output_path=tmp_path / "evidence.json",
+        )
+
+
+def test_rejects_v2_transcript_without_language_hint(tmp_path: Path) -> None:
+    audio = tmp_path / "source.wav"
+    transcript = tmp_path / "transcript.json"
+    _write_wav(audio)
+    _write_transcript(transcript, audio, schema_version=2)
+    payload = json.loads(transcript.read_text(encoding="utf-8"))
+    payload["segments"][0].pop("language_hint")
+    transcript.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(MODULE.AudioOnlyEvidenceError, match="schema v2"):
+        MODULE.prepare_audio_only_evidence(
+            audio_path=audio,
+            transcript_path=transcript,
+            output_path=tmp_path / "evidence.json",
+        )
+
+
+@pytest.mark.parametrize(
+    "language_hint",
+    ["", " Chinese ", "Chinese\nEnglish", "\x00", 7, "x" * 257],
+    ids=["empty", "surrounding-space", "control", "nul", "non-string", "too-long"],
+)
+def test_rejects_v2_transcript_with_invalid_language_hint(
+    tmp_path: Path, language_hint: object
+) -> None:
+    audio = tmp_path / "source.wav"
+    transcript = tmp_path / "transcript.json"
+    _write_wav(audio)
+    _write_transcript(transcript, audio, schema_version=2, language_hint=language_hint)
+
+    with pytest.raises(MODULE.AudioOnlyEvidenceError, match="language_hint"):
+        MODULE.prepare_audio_only_evidence(
+            audio_path=audio,
+            transcript_path=transcript,
+            output_path=tmp_path / "evidence.json",
+        )
 
 
 def test_rejects_transcript_bound_to_other_audio(tmp_path: Path) -> None:

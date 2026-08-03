@@ -192,8 +192,9 @@ revision、精度、并发和 worker 实现，必须实测。
 ## Private VoxCPM2 training
 
 See [the private, reviewed VoxCPM2 training workflow](docs/VOXCPM2_PRIVATE_TRAINING.md)
-for Silero segmentation, Qwen transcription, subtitle or audio-only evidence,
-human review, trusted dataset-plan export and owned-GPU execution.
+for controlled acquisition of authorized public source media, Silero
+segmentation, Qwen transcription, subtitle or audio-only evidence, human review,
+trusted dataset-plan export and owned-GPU execution.
 
 ## License
 

@@ -107,6 +107,11 @@ def _review_pair(
         "approved": False,
         "approved_for_training": False,
         "transcript_verified": False,
+        "review_evidence": {
+            "kind": "echoweave-burned-subtitle-review-evidence",
+            "ocr_performed": True,
+            "reason_code": None,
+        },
         "inputs": [
             _input_binding("qwen_ranges", qwen),
             _input_binding("burned_subtitle_ocr", ocr),

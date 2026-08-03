@@ -77,6 +77,11 @@ def _plan(tmp_path: Path) -> Path:
         "approved": False,
         "approved_for_training": False,
         "transcript_verified": False,
+        "review_evidence": {
+            "kind": "echoweave-burned-subtitle-review-evidence",
+            "ocr_performed": True,
+            "reason_code": None,
+        },
         "inputs": [
             _binding("qwen_ranges", qwen),
             _binding("burned_subtitle_ocr", ocr),
