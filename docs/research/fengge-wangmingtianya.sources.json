@@ -1,0 +1,190 @@
+{
+  "schema_version": 1,
+  "subject": {
+    "requested_name": "峰哥",
+    "resolved_public_name": "峰哥亡命天涯",
+    "publicly_associated_name": "周丽峰",
+    "resolution_confidence": "high",
+    "ambiguity_note": "If the requested person is not the creator at Bilibili UID 35847683, this record must not be used."
+  },
+  "research_status": "public-information-only",
+  "runtime_eligible": false,
+  "collected_at": "2026-08-03T13:39:00+08:00",
+  "public_accounts": [
+    {
+      "platform": "bilibili",
+      "display_name": "峰哥亡命天涯",
+      "account_id": "35847683",
+      "url": "https://space.bilibili.com/35847683/video",
+      "confidence": "high",
+      "source_ids": ["S01", "S08"]
+    },
+    {
+      "platform": "weibo",
+      "display_name": "峰哥亡命天涯",
+      "account_id": "coderz",
+      "url": "https://www.weibo.com/coderz",
+      "confidence": "medium",
+      "ownership_status": "same-name-page-not-independently-cross-linked",
+      "source_ids": ["S02"]
+    }
+  ],
+  "verified_public_facts": [
+    {
+      "id": "F01",
+      "statement": "The Bilibili public account is named 峰哥亡命天涯 and uses UID 35847683.",
+      "confidence": "high",
+      "source_ids": ["S01", "S08"]
+    },
+    {
+      "id": "F02",
+      "statement": "Public interviews associate the creator name 峰哥亡命天涯 with the name 周丽峰.",
+      "confidence": "high",
+      "source_ids": ["S06", "S07"]
+    },
+    {
+      "id": "F03",
+      "statement": "The Bilibili account self-description lists documentary, extreme travel, mountaineering, freediving, paragliding and underwater photography roles.",
+      "confidence": "high-as-self-description-only",
+      "source_ids": ["S08"]
+    },
+    {
+      "id": "F04",
+      "statement": "At collection time, the Bilibili public API reported 2928246 followers.",
+      "confidence": "high-but-time-sensitive",
+      "source_ids": ["S09"]
+    }
+  ],
+  "content_observations": {
+    "confidence": "high-for-content-structure",
+    "themes": [
+      "field-based travel",
+      "ordinary-person and social-condition profiles",
+      "consumer-price contrast",
+      "first-person setbacks and transitions",
+      "outdoor and unusual-destination experiences"
+    ],
+    "structure_patterns": [
+      "location plus a concrete number plus conflict or reversal",
+      "clear conclusion before field evidence",
+      "first-person experience instead of abstract exposition",
+      "humor through contrast and self-deprecation",
+      "current condition to turning point to concrete cost to personal choice"
+    ],
+    "sample_source_ids": ["S03", "S04", "S05", "S06", "S12"]
+  },
+  "unverified_leads_not_for_runtime_memory": [
+    "birth year and birthplace",
+    "former employer and software projects",
+    "employment, partnership or ownership relationships",
+    "platform enforcement reasons",
+    "ownership of the same-name Weibo page",
+    "investment labels and disputed claims",
+    "private life or current location"
+  ],
+  "collection_exclusions": [
+    "face images or embeddings",
+    "voice recordings, embeddings or cloned voices",
+    "phone numbers, addresses or private contact details",
+    "real-time location or travel itinerary",
+    "private financial, family or relationship data",
+    "third-party livestream edits treated as exact quotations"
+  ],
+  "runtime_blockers": [
+    "verified persona-profile and interactive-conversation consent",
+    "verified voice-clone consent and exact sample transcript",
+    "verified avatar-animation and likeness rights",
+    "third-party model processing consent",
+    "identity, authority, asset-rights, expiry and revocation records",
+    "human review and signed EchoWeave consent manifest"
+  ],
+  "sources": [
+    {
+      "id": "S01",
+      "url": "https://space.bilibili.com/35847683/video",
+      "publisher": "Bilibili",
+      "source_type": "same-name public account page; ownership not independently cross-linked",
+      "accessed_at": "2026-08-03"
+    },
+    {
+      "id": "S02",
+      "url": "https://www.weibo.com/coderz",
+      "publisher": "Weibo",
+      "source_type": "first-party public account",
+      "accessed_at": "2026-08-03"
+    },
+    {
+      "id": "S03",
+      "url": "https://www.bilibili.com/video/BV1pxeBzUEfa/",
+      "publisher": "峰哥亡命天涯 on Bilibili",
+      "source_type": "first-party published video",
+      "accessed_at": "2026-08-03"
+    },
+    {
+      "id": "S04",
+      "url": "https://www.bilibili.com/video/BV1jNTDzqEvv/",
+      "publisher": "峰哥亡命天涯 on Bilibili",
+      "source_type": "first-party published video",
+      "accessed_at": "2026-08-03"
+    },
+    {
+      "id": "S05",
+      "url": "https://www.bilibili.com/video/BV1BV4y1G7ek/",
+      "publisher": "峰哥亡命天涯 on Bilibili",
+      "source_type": "first-party published video",
+      "accessed_at": "2026-08-03"
+    },
+    {
+      "id": "S06",
+      "url": "https://www.bilibili.com/video/BV1Bz421C7mg/",
+      "publisher": "凉子访谈录 on Bilibili",
+      "source_type": "public interview",
+      "accessed_at": "2026-08-03"
+    },
+    {
+      "id": "S07",
+      "url": "https://news.ifeng.com/c/8gI8JcozhB8",
+      "publisher": "凤凰网",
+      "source_type": "media interview",
+      "accessed_at": "2026-08-03"
+    },
+    {
+      "id": "S08",
+      "url": "https://api.bilibili.com/x/web-interface/search/type?search_type=bili_user&keyword=%E5%B3%B0%E5%93%A5%E4%BA%A1%E5%91%BD%E5%A4%A9%E6%B6%AF",
+      "publisher": "Bilibili",
+      "source_type": "public platform API",
+      "accessed_at": "2026-08-03"
+    },
+    {
+      "id": "S09",
+      "url": "https://api.bilibili.com/x/relation/stat?vmid=35847683",
+      "publisher": "Bilibili",
+      "source_type": "public platform API",
+      "accessed_at": "2026-08-03"
+    },
+    {
+      "id": "S10",
+      "url": "https://baike.weixin.qq.com/v10005376267.htm",
+      "publisher": "微信百科",
+      "source_type": "tertiary encyclopedia",
+      "accessed_at": "2026-08-03",
+      "runtime_use": "discovery-only"
+    },
+    {
+      "id": "S11",
+      "url": "https://m.baike.com/wikiid/7279472073478619191",
+      "publisher": "快懂百科",
+      "source_type": "tertiary encyclopedia",
+      "accessed_at": "2026-08-03",
+      "runtime_use": "discovery-only"
+    },
+    {
+      "id": "S12",
+      "url": "https://www.36kr.com/p/2625541261154693",
+      "publisher": "36氪 / 卡思数据",
+      "source_type": "industry media analysis",
+      "accessed_at": "2026-08-03",
+      "runtime_use": "cross-check-only"
+    }
+  ]
+}

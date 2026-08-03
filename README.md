@@ -176,6 +176,7 @@ $env:ECHOWEAVE_ACCESS_TOKEN = "<staging-token>"
 - [完整部署](docs/DEPLOYMENT.md)
 - [授权与安全边界](docs/SECURITY.md)
 - [Nuwa 离线蒸馏与人工复核](docs/NUWA_WORKFLOW.md)
+- [公开人物研究档案：峰哥亡命天涯](docs/research/fengge-wangmingtianya-public-profile.md)
 - [运维、基准测试与 SLO](docs/OPERATIONS.md)
 - [真人 persona 注册](personas/README.md)
 
