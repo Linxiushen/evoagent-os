@@ -81,6 +81,15 @@ class WebSocketClosed(BenchmarkError):
         self.close_code = close_code
 
 
+def _tls_context(*, insecure: bool) -> ssl.SSLContext:
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    if insecure:
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+    return context
+
+
 class StandardWebSocket:
     """Minimal synchronous RFC 6455 client for text and binary messages."""
 
@@ -116,11 +125,7 @@ class StandardWebSocket:
         connected_socket: socket.socket | ssl.SSLSocket = raw_socket
         try:
             if self._parsed.scheme == "wss":
-                context = (
-                    ssl._create_unverified_context()
-                    if self._insecure_tls
-                    else ssl.create_default_context()
-                )
+                context = _tls_context(insecure=self._insecure_tls)
                 connected_socket = context.wrap_socket(
                     raw_socket, server_hostname=self._parsed.hostname
                 )

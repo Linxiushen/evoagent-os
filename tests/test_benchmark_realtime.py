@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import ssl
 import sys
 import threading
 import wave
@@ -116,6 +117,15 @@ def test_load_audio_fixture_pads_to_20ms_and_appends_tail(tmp_path: Path) -> Non
     assert len(fixture.pcm16) == 5 * MODULE._AUDIO_FRAME_BYTES
     assert fixture.pcm16.startswith(pcm)
     assert fixture.pcm16[len(pcm) :] == b"\x00" * (len(fixture.pcm16) - len(pcm))
+
+
+@pytest.mark.parametrize("insecure", [False, True])
+def test_tls_context_requires_tls_1_2_and_bounds_verification(insecure: bool) -> None:
+    context = MODULE._tls_context(insecure=insecure)
+
+    assert context.minimum_version == ssl.TLSVersion.TLSv1_2
+    assert context.check_hostname is (not insecure)
+    assert context.verify_mode == (ssl.CERT_NONE if insecure else ssl.CERT_REQUIRED)
 
 
 @pytest.mark.parametrize(
