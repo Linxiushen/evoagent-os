@@ -38,6 +38,20 @@ AudioWorklet -> EW/PCM16 -> VAD -> Qwen ASR -> DeepSeek SSE
                                                                -> bounded playout
 ```
 
+## 峰哥数字人训练研究线
+
+仓库正在用“峰哥亡命天涯”公开研究线检验一条**授权门控、本地处理、不会把生物特征提交到 GitHub**的真人数字人工作流。这个案例不展示无法验证的“克隆完成”结论，而是把公开资料研究、授权准入、逐段人工审核、数据集导出、VoxCPM2 基线和训练硬件门禁串成一条可审计流程。
+
+| 里程碑 | 当前结果 |
+|---|---|
+| 人工审核数据 | 22 段，309.42 秒；私有保存 |
+| VoxCPM2 基线 | 已完成 48 kHz PCM16 零样本评测；不是 LoRA |
+| 内容回译 | Qwen3-ASR 归一化匹配率 1.000000 |
+| VoxCPM2 LoRA | 尚未执行；等待正式授权工件和合格 Linux GPU |
+| 公开发布 | 未注册真人 persona，未提交声音、视频或适配器 |
+
+完整实验记录、公开指标和隐私边界见[经授权门控的创作者数字分身实验：峰哥研究线](docs/FENGGE_DIGITAL_TWIN_LAB.md)。
+
 ## 真人数字分身需要什么输入
 
 虚构的 `demo` persona 不需要真人信息。创建真人数字分身至少需要下列**经本人
@@ -178,6 +192,7 @@ $env:ECHOWEAVE_ACCESS_TOKEN = "<staging-token>"
 - [远程 GPU 复现、预检与模型验收](gpu_worker_pack/README.md)
 - [授权与安全边界](docs/SECURITY.md)
 - [Nuwa 离线蒸馏与人工复核](docs/NUWA_WORKFLOW.md)
+- [经授权门控的创作者数字分身实验：峰哥研究线](docs/FENGGE_DIGITAL_TWIN_LAB.md)
 - [公开人物研究档案：峰哥亡命天涯](docs/research/fengge-wangmingtianya-public-profile.md)
 - [运维、基准测试与 SLO](docs/OPERATIONS.md)
 - [真人 persona 注册](personas/README.md)
