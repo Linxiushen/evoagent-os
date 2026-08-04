@@ -23,6 +23,12 @@ REQUIRED_PACKAGE_FILES = {
     "echoweave/web/mic-worklet.js",
     "echoweave/web/styles.css",
 }
+REQUIRED_LICENSE_FILES = {
+    "LICENSES/Contributor-Covenant-CC-BY-4.0.txt",
+    "LICENSE",
+    "NOTICE",
+    "LICENSES/Silero-MIT.txt",
+}
 FORBIDDEN_SUFFIXES = {
     ".env",
     ".key",
@@ -103,6 +109,24 @@ def verify_wheel(path: Path, expected_version: str) -> str:
         )
         if empty:
             raise ValueError(f"wheel contains empty required files: {empty}")
+
+        license_root = metadata_name.removesuffix("METADATA") + "licenses/"
+        missing_licenses = sorted(
+            relative
+            for relative in REQUIRED_LICENSE_FILES
+            if license_root + relative not in names
+        )
+        if missing_licenses:
+            raise ValueError(
+                f"wheel is missing required license files: {missing_licenses}"
+            )
+        empty_licenses = sorted(
+            relative
+            for relative in REQUIRED_LICENSE_FILES
+            if not archive.read(license_root + relative)
+        )
+        if empty_licenses:
+            raise ValueError(f"wheel contains empty license files: {empty_licenses}")
 
         record_name = metadata_name.removesuffix("METADATA") + "RECORD"
         if record_name not in names:

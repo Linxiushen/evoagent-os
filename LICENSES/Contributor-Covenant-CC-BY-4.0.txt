@@ -1,0 +1,14 @@
+Contributor Covenant Code of Conduct, version 2.1
+
+Source material:
+https://www.contributor-covenant.org/version/2/1/code_of_conduct.html
+
+Copyright (c) Contributor Covenant contributors.
+The source material is licensed under the Creative Commons Attribution 4.0
+International Public License:
+https://creativecommons.org/licenses/by/4.0/legalcode
+
+EchoWeave-RTC's CODE_OF_CONDUCT.md is adapted from that source. It shortens
+and combines sections, replaces the enforcement contact, and adds
+project-specific rules covering impersonation, non-consensual cloning, fraud,
+and privacy. No endorsement by Contributor Covenant is implied.

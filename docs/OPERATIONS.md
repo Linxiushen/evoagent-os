@@ -173,11 +173,36 @@ $env:ECHOWEAVE_ACCESS_TOKEN = "<at-least-32-byte-staging-token>"
   --output runtime\benchmark-baseline.json
 ```
 
-The report includes connection-to-ready, first-token, text-final and full-turn
-p50/p95/p99, successful turns per second, degraded events and bounded error
-classes. The session token and server error messages are never reported. Exit
-code 0 means `--min-success-rate` (default 0.99) was met, 1 means it was missed,
-and 2 means setup or connection failed.
+Use a production-shaped voice fixture to exercise VAD and ASR as well as the
+response path. The WAV must be uncompressed mono PCM16 at exactly 16 kHz. The
+benchmark sends exact 20 ms EW v1 microphone packets at realtime pace and adds
+800 ms of silence so the configured VAD can normally close the utterance:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\benchmark_realtime.py `
+  --url ws://127.0.0.1:8765/ws `
+  --workers 2 --turns 10 `
+  --audio-wav C:\private\benchmark\utterance.wav `
+  --output runtime\benchmark-audio.json
+```
+
+`--message` and `--audio-wav` are mutually exclusive. Keep the default
+`--audio-pacing realtime` against the gateway: unpaced audio is available only
+for an isolated transport test and will normally trip the gateway's microphone
+rate limit. `--audio-tail-silence-ms` accepts a 20 ms-aligned value when a VAD
+profile needs a different endpointing tail.
+
+The schema-v2 report includes connection-to-ready, first-token, text-final,
+full-turn, speech-end-to-ASR-final, first-audio and first-video p50/p95/p99. It
+also records audio/video payload bytes and packet counts, PTS monotonicity and
+violations, media turn-ID mismatches, successful turns per second, and bounded
+degradation counts by component and fallback. The input binding contains only
+the PCM SHA-256, duration and frame metadata. It never reports the submitted
+text, token, target URL, persona, local WAV path, server error messages or
+degradation reasons. Treat the digest and aggregate timing report as
+access-controlled operational data. Exit code 0 means `--min-success-rate`
+(default 0.99) was met, 1 means it was missed, and 2 means setup or connection
+failed.
 
 Increase load in steps (1, 2, 4, 8, ... workers), allow model caches to warm up,
 and hold each level for at least ten minutes. Stop increasing load when one of

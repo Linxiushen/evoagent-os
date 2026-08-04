@@ -1,3 +1,10 @@
+"""Voice activity adapters.
+
+Portions of ``SileroV5VAD`` adapt the Silero v5.1.2 ONNX streaming state and
+endpoint algorithm at commit 6478567951ae5c9979ad7b234185b5515f4be7a1.
+Copyright (c) 2020-present Silero Team; see ``LICENSES/Silero-MIT.txt``.
+"""
+
 from __future__ import annotations
 
 import array

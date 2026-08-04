@@ -1,2 +1,12 @@
 EchoWeave-RTC
 Copyright 2026 Linxiushen
+
+Portions of the Silero v5 ONNX streaming state and endpoint logic are adapted
+from snakers4/silero-vad v5.1.2 (commit
+6478567951ae5c9979ad7b234185b5515f4be7a1).
+Copyright (c) 2020-present Silero Team. Licensed under the MIT License; see
+LICENSES/Silero-MIT.txt.
+
+CODE_OF_CONDUCT.md is adapted from Contributor Covenant 2.1, copyright
+Contributor Covenant contributors, under CC BY 4.0. See
+LICENSES/Contributor-Covenant-CC-BY-4.0.txt.

@@ -65,11 +65,10 @@ should retain an SBOM and vulnerability scan alongside that digest.
 
 ## CI actions
 
-The checked-in `ci/github-actions.yml` template gives only `contents: read` and
-pins `checkout`, `setup-python`, and `setup-node` to full commit SHAs. Dependabot
-or an equivalent reviewer may propose SHA updates, but a floating major tag
-must not replace those pins. Copy the template to `.github/workflows/ci.yml`
-only through a GitHub credential authorized to create workflow files.
+The active `.github/workflows/ci.yml` workflow gives only `contents: read` and
+pins `checkout`, `setup-python`, and `setup-node` to full commit SHAs. CodeQL
+and dependency review run in separate least-privilege workflows, and Dependabot
+may propose reviewed SHA updates. A floating major tag must not replace a pin.
 
 ## Media acquisition executables
 

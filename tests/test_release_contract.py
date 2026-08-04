@@ -26,7 +26,7 @@ def test_release_versions_and_static_assets_stay_in_sync():
     assert "USER echoweave" in dockerfile
     assert "HEALTHCHECK" in dockerfile
 
-    workflow = (ROOT / "ci" / "github-actions.yml").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert f"--expected-version {version}" in workflow
     for test_name in (
         "test_app_lifecycle.mjs",
@@ -35,6 +35,22 @@ def test_release_versions_and_static_assets_stay_in_sync():
     ):
         assert test_name in workflow
     assert not re.search(r"uses:\s+[^\s]+@v\d+\s*$", workflow, re.MULTILINE)
+
+    silero_license = ROOT / "LICENSES" / "Silero-MIT.txt"
+    assert "Copyright (c) 2020-present Silero Team" in silero_license.read_text(
+        encoding="utf-8"
+    )
+    notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
+    assert "snakers4/silero-vad v5.1.2" in notice
+    vad_source = (ROOT / "src" / "echoweave" / "adapters" / "vad.py").read_text(
+        encoding="utf-8"
+    )
+    assert "6478567951ae5c9979ad7b234185b5515f4be7a1" in vad_source
+    covenant_notice = (
+        ROOT / "LICENSES" / "Contributor-Covenant-CC-BY-4.0.txt"
+    ).read_text(encoding="utf-8")
+    assert "Creative Commons Attribution 4.0" in covenant_notice
+    assert "Contributor Covenant contributors" in notice
 
 
 def test_docker_context_is_an_allowlist_without_local_secrets():

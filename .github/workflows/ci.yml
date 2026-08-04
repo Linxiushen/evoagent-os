@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -53,7 +54,7 @@ jobs:
       - name: Run tests
         run: pytest -q
 
-      - name: Check browser JavaScript syntax
+      - name: Check browser JavaScript
         run: |
           node --check src/echoweave/web/app.js
           node --check src/echoweave/web/mic-worklet.js
@@ -63,7 +64,6 @@ jobs:
 
       - name: Build and verify reproducible wheel
         env:
-          # 1980-01-01 is ZIP's earliest portable timestamp.
           SOURCE_DATE_EPOCH: "315532800"
         run: |
           python -m pip wheel . --no-deps --wheel-dir "$RUNNER_TEMP/wheel-one"

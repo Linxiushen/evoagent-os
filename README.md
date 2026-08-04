@@ -1,5 +1,10 @@
 # EchoWeave-RTC
 
+[![CI](https://github.com/Linxiushen/echoweave-rtc/actions/workflows/ci.yml/badge.svg)](https://github.com/Linxiushen/echoweave-rtc/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/Linxiushen/echoweave-rtc)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10--3.12-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![Status](https://img.shields.io/badge/status-research%20preview-f59e0b)](docs/OPERATIONS.md)
+
 EchoWeave-RTC 0.2 是一个“经本人授权、持续标识为 AI”的实时语音与数字头像
 Agent 编排框架。它把端点检测、语音识别、流式回答、语音合成、口型视频、
 打断、背压与可观测性统一在一条可测试的会话链路里。
@@ -8,6 +13,11 @@ Agent 编排框架。它把端点检测、语音识别、流式回答、语音�
 > 欺骗性再现真人。真人 persona 只能使用本人或合法权利人的明确授权素材，并
 > 从带授权范围、有效期、素材哈希和服务端签名的清单加载。浏览器和生成视频
 > 必须持续显示 AI / synthetic media 标识。
+
+![EchoWeave-RTC 实时控制台](docs/assets/echoweave-console.jpg)
+
+> 截图展示无需真人数据或模型密钥的虚构 `demo` 链路。完整模型组合需要按部署
+> 文档单独配置 GPU worker，并以真实硬件基准结果为准。
 
 ## 0.2 能力概览
 
@@ -115,8 +125,8 @@ node tests/js/test_frontend_contract.mjs
 node tests/js/test_mic_worklet.mjs
 ```
 
-仓库包含可复制到 `.github/workflows/` 的
-[`ci/github-actions.yml`](ci/github-actions.yml) CI 模板。
+提交和拉取请求会运行 [GitHub Actions CI](.github/workflows/ci.yml)，覆盖 Python
+测试、Ruff、浏览器契约测试和可复现 wheel 校验。
 
 ## Docker Compose
 
@@ -184,6 +194,7 @@ $env:ECHOWEAVE_ACCESS_TOKEN = "<staging-token>"
 
 ## 文档
 
+- [Press kit 与中英文发布素材](docs/PRESS_KIT.md)
 - [架构、背压与截止时间](docs/ARCHITECTURE.md)
 - [媒体与控制协议](docs/PROTOCOL.md)
 - [模型、许可证与硬件](docs/MODELS.md)
@@ -196,6 +207,14 @@ $env:ECHOWEAVE_ACCESS_TOKEN = "<staging-token>"
 - [公开人物研究档案：峰哥亡命天涯](docs/research/fengge-wangmingtianya-public-profile.md)
 - [运维、基准测试与 SLO](docs/OPERATIONS.md)
 - [真人 persona 注册](personas/README.md)
+
+## 开源协作
+
+欢迎提交协议、实时性能、可观测性、适配器、安全和无障碍方面的改进。开始前请
+阅读[贡献指南](CONTRIBUTING.md)和[行为准则](CODE_OF_CONDUCT.md)。漏洞、凭证
+泄露或授权工件暴露请通过 [GitHub 私密安全报告](https://github.com/Linxiushen/echoweave-rtc/security/advisories/new)
+提交，不要创建公开 issue。任何贡献都不得包含真人声音、视频、生物特征、
+persona adapter、私有转写或密钥。
 
 ## 硬件
 

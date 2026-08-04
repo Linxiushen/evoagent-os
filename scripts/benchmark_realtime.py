@@ -24,6 +24,7 @@ import struct
 import sys
 import threading
 import time
+import wave
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -34,13 +35,37 @@ from urllib.parse import SplitResult, urlsplit
 
 try:
     from echoweave.observability import LatencyWindow
+    from echoweave.protocol import (
+        MAX_MEDIA_PACKET_BYTES,
+        MediaPacket,
+        PacketKind,
+        pack_packet,
+        unpack_packet,
+    )
 except ModuleNotFoundError:  # Allow running from an uninstalled source checkout.
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
     from echoweave.observability import LatencyWindow
+    from echoweave.protocol import (
+        MAX_MEDIA_PACKET_BYTES,
+        MediaPacket,
+        PacketKind,
+        pack_packet,
+        unpack_packet,
+    )
 
 _WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 _MAX_HANDSHAKE_BYTES = 64 * 1024
-_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
+_MAX_MESSAGE_BYTES = MAX_MEDIA_PACKET_BYTES
+_AUDIO_SAMPLE_RATE = 16_000
+_AUDIO_SAMPLE_WIDTH = 2
+_AUDIO_FRAME_MS = 20
+_AUDIO_FRAME_BYTES = _AUDIO_SAMPLE_RATE * _AUDIO_SAMPLE_WIDTH * _AUDIO_FRAME_MS // 1_000
+_DEFAULT_AUDIO_TAIL_SILENCE_MS = 800
+_MAX_AUDIO_WAV_SECONDS = 300
+_DEGRADATION_COMPONENTS = frozenset({"avatar", "tts", "turn_cancel"})
+_DEGRADATION_FALLBACKS = frozenset(
+    {"browser_speech", "generation_quarantine", "static_avatar"}
+)
 
 
 class BenchmarkError(RuntimeError):
@@ -78,6 +103,7 @@ class StandardWebSocket:
         self._max_message_bytes = max_message_bytes
         self._socket: socket.socket | ssl.SSLSocket | None = None
         self._reader: BinaryIO | None = None
+        self._send_lock = threading.Lock()
 
     def connect(self) -> None:
         if self._socket is not None:
@@ -108,6 +134,9 @@ class StandardWebSocket:
 
     def send_text(self, value: str) -> None:
         self._send_frame(0x1, value.encode("utf-8"))
+
+    def send_binary(self, value: bytes) -> None:
+        self._send_frame(0x2, value)
 
     def receive(self) -> str | bytes:
         message_opcode: int | None = None
@@ -253,9 +282,10 @@ class StandardWebSocket:
         return bytes(result)
 
     def _send_frame(self, opcode: int, payload: bytes) -> None:
-        if self._socket is None:
-            raise WebSocketClosed()
-        self._send_frame_on(self._socket, opcode, payload)
+        with self._send_lock:
+            if self._socket is None:
+                raise WebSocketClosed()
+            self._send_frame_on(self._socket, opcode, payload)
 
     @staticmethod
     def _send_frame_on(
@@ -297,7 +327,29 @@ class WorkerResult:
     first_token_ms: list[float] = field(default_factory=list)
     text_final_ms: list[float] = field(default_factory=list)
     turn_complete_ms: list[float] = field(default_factory=list)
+    speech_end_to_asr_final_ms: list[float] = field(default_factory=list)
+    first_audio_ms: list[float] = field(default_factory=list)
+    first_video_ms: list[float] = field(default_factory=list)
+    audio_packets: int = 0
+    audio_bytes: int = 0
+    audio_pts_violations: int = 0
+    video_packets: int = 0
+    video_bytes: int = 0
+    video_pts_violations: int = 0
+    media_turn_mismatches: int = 0
+    degraded_by_component: Counter[str] = field(default_factory=Counter)
+    degraded_by_fallback: Counter[str] = field(default_factory=Counter)
     errors: Counter[str] = field(default_factory=Counter)
+
+
+@dataclass(frozen=True, slots=True)
+class AudioFixture:
+    pcm16: bytes
+    pcm_sha256: str
+    source_duration_ms: float
+    stream_duration_ms: int
+    frame_count: int
+    tail_silence_ms: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,20 +366,120 @@ class BenchmarkConfig:
     inject_invalid_rate: float
     inject_disconnect_rate: float
     seed: int
+    audio: AudioFixture | None = None
+    audio_pacing: str = "realtime"
+
+
+def _load_audio_fixture(
+    path: Path,
+    *,
+    tail_silence_ms: int = _DEFAULT_AUDIO_TAIL_SILENCE_MS,
+) -> AudioFixture:
+    if tail_silence_ms < 0 or tail_silence_ms > 10_000:
+        raise BenchmarkError("audio_tail_silence_invalid")
+    if tail_silence_ms % _AUDIO_FRAME_MS:
+        raise BenchmarkError("audio_tail_silence_not_frame_aligned")
+    if not path.is_file():
+        raise BenchmarkError("audio_wav_not_found")
+    try:
+        with wave.open(str(path), "rb") as stream:
+            channels = stream.getnchannels()
+            sample_width = stream.getsampwidth()
+            sample_rate = stream.getframerate()
+            compression = stream.getcomptype()
+            frame_count = stream.getnframes()
+            if channels != 1:
+                raise BenchmarkError("audio_wav_not_mono")
+            if sample_width != _AUDIO_SAMPLE_WIDTH:
+                raise BenchmarkError("audio_wav_not_pcm16")
+            if sample_rate != _AUDIO_SAMPLE_RATE:
+                raise BenchmarkError("audio_wav_not_16khz")
+            if compression != "NONE":
+                raise BenchmarkError("audio_wav_compressed")
+            if frame_count <= 0:
+                raise BenchmarkError("audio_wav_empty")
+            if frame_count > _AUDIO_SAMPLE_RATE * _MAX_AUDIO_WAV_SECONDS:
+                raise BenchmarkError("audio_wav_too_long")
+            pcm16 = stream.readframes(frame_count)
+    except BenchmarkError:
+        raise
+    except (EOFError, OSError, wave.Error) as exc:
+        raise BenchmarkError("audio_wav_invalid") from exc
+    if len(pcm16) != frame_count * _AUDIO_SAMPLE_WIDTH:
+        raise BenchmarkError("audio_wav_truncated")
+
+    source_duration_ms = frame_count * 1_000 / _AUDIO_SAMPLE_RATE
+    padding_bytes = (-len(pcm16)) % _AUDIO_FRAME_BYTES
+    tail_bytes = tail_silence_ms * _AUDIO_SAMPLE_RATE * _AUDIO_SAMPLE_WIDTH // 1_000
+    streamed_pcm16 = pcm16 + (b"\x00" * (padding_bytes + tail_bytes))
+    streamed_frame_count = len(streamed_pcm16) // _AUDIO_FRAME_BYTES
+    return AudioFixture(
+        pcm16=streamed_pcm16,
+        pcm_sha256=hashlib.sha256(pcm16).hexdigest(),
+        source_duration_ms=source_duration_ms,
+        stream_duration_ms=streamed_frame_count * _AUDIO_FRAME_MS,
+        frame_count=streamed_frame_count,
+        tail_silence_ms=tail_silence_ms,
+    )
+
+
+def _server_message(client: StandardWebSocket) -> dict[str, Any] | MediaPacket:
+    message = client.receive()
+    if isinstance(message, bytes):
+        try:
+            packet = unpack_packet(message)
+        except (TypeError, ValueError) as exc:
+            raise BenchmarkError("server_invalid_media_packet") from exc
+        if packet.kind not in {PacketKind.TTS_PCM16, PacketKind.VIDEO_FRAGMENT}:
+            raise BenchmarkError("server_unsupported_media_packet")
+        return packet
+    try:
+        payload = json.loads(message)
+    except json.JSONDecodeError as exc:
+        raise BenchmarkError("server_invalid_json") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("type"), str):
+        raise BenchmarkError("server_invalid_event")
+    return payload
 
 
 def _event(client: StandardWebSocket) -> dict[str, Any]:
     while True:
-        message = client.receive()
-        if isinstance(message, bytes):
+        message = _server_message(client)
+        if isinstance(message, MediaPacket):
             continue
-        try:
-            payload = json.loads(message)
-        except json.JSONDecodeError as exc:
-            raise BenchmarkError("server_invalid_json") from exc
-        if not isinstance(payload, dict) or not isinstance(payload.get("type"), str):
-            raise BenchmarkError("server_invalid_event")
-        return payload
+        return message
+
+
+def _send_audio(
+    client: StandardWebSocket,
+    fixture: AudioFixture,
+    *,
+    pacing: str,
+    stop_event: threading.Event,
+) -> None:
+    if pacing not in {"realtime", "none"}:
+        raise BenchmarkError("audio_pacing_invalid")
+    started = time.perf_counter()
+    for index in range(fixture.frame_count):
+        if stop_event.is_set():
+            return
+        if pacing == "realtime" and index:
+            target = started + index * _AUDIO_FRAME_MS / 1_000
+            remaining = target - time.perf_counter()
+            if remaining > 0 and stop_event.wait(remaining):
+                return
+        offset = index * _AUDIO_FRAME_BYTES
+        frame = fixture.pcm16[offset : offset + _AUDIO_FRAME_BYTES]
+        if len(frame) != _AUDIO_FRAME_BYTES:
+            raise BenchmarkError("audio_fixture_invalid")
+        client.send_binary(
+            pack_packet(
+                PacketKind.MIC_PCM16,
+                turn_id=0,
+                pts_ms=index * _AUDIO_FRAME_MS,
+                payload=frame,
+            )
+        )
 
 
 def _connect(config: BenchmarkConfig, result: WorkerResult) -> StandardWebSocket:
@@ -381,53 +533,157 @@ def _run_turn(
     if invalid_injected:
         client.send_text("{")
         result.injected_invalid_messages += 1
-    client.send_text(
-        json.dumps({"type": "text", "text": message}, separators=(",", ":"))
-    )
+
+    sender_stop = threading.Event()
+    sender_errors: list[BaseException] = []
+    sender: threading.Thread | None = None
+    if config.audio is None:
+        client.send_text(
+            json.dumps({"type": "text", "text": message}, separators=(",", ":"))
+        )
+    else:
+
+        def send_audio() -> None:
+            try:
+                _send_audio(
+                    client,
+                    config.audio,
+                    pacing=config.audio_pacing,
+                    stop_event=sender_stop,
+                )
+            except Exception as exc:  # noqa: BLE001 - propagate thread failures
+                sender_errors.append(exc)
+                client.close(send_frame=False)
+
+        sender = threading.Thread(
+            target=send_audio,
+            name="echoweave-benchmark-audio-sender",
+            daemon=True,
+        )
+        sender.start()
 
     first_token: float | None = None
     text_final: float | None = None
+    speech_ended_at: float | None = None
     fatal_error: str | None = None
-    while True:
-        event = _event(client)
-        event_type = event["type"]
-        elapsed_ms = (time.perf_counter() - started) * 1_000
-        if event_type == "assistant.delta" and first_token is None:
-            first_token = elapsed_ms
-        elif event_type == "assistant.final" and text_final is None:
-            text_final = elapsed_ms
-        elif event_type == "degraded":
-            result.degraded_events += 1
-        elif event_type == "error":
-            code = _server_error_code(event)
-            if not (invalid_injected and code == "server_invalid_control_json"):
-                fatal_error = code
-        elif (
-            event_type == "session.state"
-            and event.get("state") == "listening"
-            and isinstance(event.get("turn_id"), int)
-            and event["turn_id"] > 0
-        ):
-            if fatal_error is not None:
-                raise BenchmarkError(fatal_error)
-            if first_token is None or text_final is None:
-                raise BenchmarkError("turn_incomplete")
-            result.first_token_ms.append(first_token)
-            result.text_final_ms.append(text_final)
-            result.turn_complete_ms.append(elapsed_ms)
-            return
+    last_pts: dict[tuple[PacketKind, int], int] = {}
+    seen_media_streams: set[tuple[PacketKind, int]] = set()
+    media_turn_ids: list[int] = []
+    terminal_turn_id: int | None = None
+    terminal_elapsed_ms: float | None = None
+    receive_error: BaseException | None = None
+    try:
+        while terminal_turn_id is None:
+            received = _server_message(client)
+            received_at = time.perf_counter()
+            elapsed_ms = (received_at - started) * 1_000
+            if isinstance(received, MediaPacket):
+                media_turn_ids.append(received.turn_id)
+                pts_key = (received.kind, received.turn_id)
+                previous_pts = last_pts.get(pts_key)
+                if received.kind == PacketKind.TTS_PCM16:
+                    if pts_key not in seen_media_streams:
+                        result.first_audio_ms.append(elapsed_ms)
+                    result.audio_packets += 1
+                    result.audio_bytes += len(received.payload)
+                    if previous_pts is not None and received.pts_ms < previous_pts:
+                        result.audio_pts_violations += 1
+                else:
+                    if pts_key not in seen_media_streams:
+                        result.first_video_ms.append(elapsed_ms)
+                    result.video_packets += 1
+                    result.video_bytes += len(received.payload)
+                    if previous_pts is not None and received.pts_ms < previous_pts:
+                        result.video_pts_violations += 1
+                last_pts[pts_key] = received.pts_ms
+                seen_media_streams.add(pts_key)
+                continue
+
+            event_type = received["type"]
+            if event_type == "vad.speech_ended":
+                speech_ended_at = received_at
+            elif event_type == "asr.final" and speech_ended_at is not None:
+                result.speech_end_to_asr_final_ms.append(
+                    (received_at - speech_ended_at) * 1_000
+                )
+            elif event_type == "assistant.delta" and first_token is None:
+                first_token = elapsed_ms
+            elif event_type == "assistant.final" and text_final is None:
+                text_final = elapsed_ms
+            elif event_type == "degraded":
+                result.degraded_events += 1
+                result.degraded_by_component[
+                    _bounded_dimension(
+                        received.get("component"), _DEGRADATION_COMPONENTS
+                    )
+                ] += 1
+                result.degraded_by_fallback[
+                    _bounded_dimension(received.get("fallback"), _DEGRADATION_FALLBACKS)
+                ] += 1
+            elif event_type == "error":
+                code = _server_error_code(received)
+                if not (invalid_injected and code == "server_invalid_control_json"):
+                    fatal_error = code
+            elif (
+                event_type == "session.state"
+                and received.get("state") == "listening"
+                and isinstance(received.get("turn_id"), int)
+                and received["turn_id"] > 0
+            ):
+                terminal_turn_id = received["turn_id"]
+                terminal_elapsed_ms = elapsed_ms
+    except Exception as exc:  # noqa: BLE001 - preserve receive failure after cleanup
+        receive_error = exc
+    finally:
+        sender_stop.set()
+        if sender is not None:
+            sender.join(timeout=5.0)
+
+    if sender is not None and sender.is_alive():
+        raise BenchmarkError("audio_sender_stuck")
+    if sender_errors:
+        error = sender_errors[0]
+        if isinstance(error, BenchmarkError):
+            raise error
+        raise BenchmarkError("audio_send_failed") from error
+    if receive_error is not None:
+        raise receive_error
+    if terminal_turn_id is None or terminal_elapsed_ms is None:
+        raise BenchmarkError("turn_incomplete")
+    result.media_turn_mismatches += sum(
+        turn_id != terminal_turn_id for turn_id in media_turn_ids
+    )
+    if fatal_error is not None:
+        raise BenchmarkError(fatal_error)
+    if first_token is None or text_final is None:
+        raise BenchmarkError("turn_incomplete")
+    result.first_token_ms.append(first_token)
+    result.text_final_ms.append(text_final)
+    result.turn_complete_ms.append(terminal_elapsed_ms)
+
+
+def _safe_dimension(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        return "unknown"
+    safe = "".join(
+        character
+        for character in value.lower()
+        if character.isalnum() or character in {"_", "-"}
+    )
+    return safe[:80] or "unknown"
+
+
+def _bounded_dimension(value: object, allowed: frozenset[str]) -> str:
+    normalized = _safe_dimension(value)
+    return normalized if normalized in allowed else "unknown"
 
 
 def _server_error_code(event: Mapping[str, Any]) -> str:
     raw_code = event.get("code")
     if not isinstance(raw_code, str) or not raw_code:
         return "server_error_unknown"
-    safe = "".join(
-        character
-        for character in raw_code.lower()
-        if character.isalnum() or character == "_"
-    )
-    return f"server_{safe[:80]}" if safe else "server_error_unknown"
+    safe = _safe_dimension(raw_code).replace("-", "_")
+    return f"server_{safe}" if safe != "unknown" else "server_error_unknown"
 
 
 def _error_code(exc: BaseException) -> str:
@@ -488,6 +744,13 @@ def _latency_summary(values: list[float]) -> dict[str, int | float | None]:
     return window.snapshot()
 
 
+def _combined_counter(results: list[WorkerResult], attribute: str) -> Counter[str]:
+    combined: Counter[str] = Counter()
+    for result in results:
+        combined.update(getattr(result, attribute))
+    return combined
+
+
 def run_benchmark(config: BenchmarkConfig) -> dict[str, Any]:
     started_at = datetime.now(timezone.utc)
     started = time.perf_counter()
@@ -506,18 +769,37 @@ def run_benchmark(config: BenchmarkConfig) -> dict[str, Any]:
     attempted = sum(result.attempted for result in results)
     succeeded = sum(result.succeeded for result in results)
     failed = sum(result.failed for result in results)
+    audio_packets = sum(result.audio_packets for result in results)
+    audio_pts_violations = sum(result.audio_pts_violations for result in results)
+    video_packets = sum(result.video_packets for result in results)
+    video_pts_violations = sum(result.video_pts_violations for result in results)
+    degraded_by_component = _combined_counter(results, "degraded_by_component")
+    degraded_by_fallback = _combined_counter(results, "degraded_by_fallback")
+
+    input_config: dict[str, Any] = {
+        "mode": "audio_wav" if config.audio is not None else "text",
+    }
+    if config.audio is not None:
+        input_config["audio"] = {
+            "pcm_sha256": config.audio.pcm_sha256,
+            "source_duration_ms": round(config.audio.source_duration_ms, 3),
+            "stream_duration_ms": config.audio.stream_duration_ms,
+            "frame_duration_ms": _AUDIO_FRAME_MS,
+            "frame_count": config.audio.frame_count,
+            "tail_silence_ms": config.audio.tail_silence_ms,
+            "pacing": config.audio_pacing,
+        }
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "started_at": started_at.isoformat().replace("+00:00", "Z"),
         "duration_seconds": duration_seconds,
-        "target": _safe_target(config.url),
         "config": {
             "workers": config.workers,
             "turns_per_worker": config.turns,
-            "persona": config.persona,
             "timeout_seconds": config.timeout_seconds,
             "insecure_tls": config.insecure_tls,
+            "input": input_config,
             "fault_injection": {
                 "delay_ms": config.inject_delay_ms,
                 "invalid_message_rate": config.inject_invalid_rate,
@@ -553,16 +835,44 @@ def run_benchmark(config: BenchmarkConfig) -> dict[str, Any]:
             "turn_complete": _latency_summary(
                 [value for result in results for value in result.turn_complete_ms]
             ),
+            "speech_end_to_asr_final": _latency_summary(
+                [
+                    value
+                    for result in results
+                    for value in result.speech_end_to_asr_final_ms
+                ]
+            ),
+            "first_audio": _latency_summary(
+                [value for result in results for value in result.first_audio_ms]
+            ),
+            "first_video": _latency_summary(
+                [value for result in results for value in result.first_video_ms]
+            ),
+        },
+        "media": {
+            "audio": {
+                "packets": audio_packets,
+                "bytes": sum(result.audio_bytes for result in results),
+                "pts_monotonic": (audio_pts_violations == 0 if audio_packets else None),
+                "pts_violations": audio_pts_violations,
+            },
+            "video": {
+                "packets": video_packets,
+                "bytes": sum(result.video_bytes for result in results),
+                "pts_monotonic": (video_pts_violations == 0 if video_packets else None),
+                "pts_violations": video_pts_violations,
+            },
+            "turn_id_mismatches": sum(
+                result.media_turn_mismatches for result in results
+            ),
+        },
+        "degradations": {
+            "total_events": sum(result.degraded_events for result in results),
+            "by_component": dict(sorted(degraded_by_component.items())),
+            "by_fallback": dict(sorted(degraded_by_fallback.items())),
         },
         "errors": dict(sorted(errors.items())),
     }
-
-
-def _safe_target(url: str) -> str:
-    parsed = urlsplit(url)
-    return StandardWebSocket._host_header(parsed).join(
-        (f"{parsed.scheme}://", parsed.path or "/")
-    )
 
 
 def _rate(value: str) -> float:
@@ -576,6 +886,13 @@ def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed <= 0:
         raise argparse.ArgumentTypeError("value must be positive")
+    return parsed
+
+
+def _nonnegative_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("value must be non-negative")
     return parsed
 
 
@@ -597,11 +914,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--persona", default="demo")
     parser.add_argument("--workers", type=_positive_int, default=1)
     parser.add_argument("--turns", type=_positive_int, default=5)
-    parser.add_argument(
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
         "--message",
         action="append",
         dest="messages",
         help="text turn; repeat for a round-robin corpus",
+    )
+    input_group.add_argument(
+        "--audio-wav",
+        type=Path,
+        help="repeat one mono 16 kHz PCM16 WAV as a paced microphone turn",
+    )
+    parser.add_argument(
+        "--audio-pacing",
+        choices=("realtime", "none"),
+        default="realtime",
+        help="pace WAV frames in realtime (default) or send without pacing",
+    )
+    parser.add_argument(
+        "--audio-tail-silence-ms",
+        type=_nonnegative_int,
+        default=_DEFAULT_AUDIO_TAIL_SILENCE_MS,
+        help="append frame-aligned silence so VAD can close the utterance",
     )
     parser.add_argument("--timeout-seconds", type=_nonnegative_float, default=60.0)
     parser.add_argument(
@@ -626,6 +961,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--timeout-seconds must be greater than zero and at most 600")
     if args.inject_delay_ms > 60_000:
         parser.error("--inject-delay-ms may not exceed 60000")
+    if args.audio_tail_silence_ms > 10_000:
+        parser.error("--audio-tail-silence-ms may not exceed 10000")
+    if args.audio_tail_silence_ms % _AUDIO_FRAME_MS:
+        parser.error(f"--audio-tail-silence-ms must be a multiple of {_AUDIO_FRAME_MS}")
     return args
 
 
@@ -634,21 +973,31 @@ def main(argv: list[str] | None = None) -> int:
     messages = tuple(args.messages or ("请用一句话说明你是一个 AI 数字人。",))
     if any(not message or len(message) > 10_000 for message in messages):
         raise SystemExit("messages must contain 1 to 10000 characters")
-    config = BenchmarkConfig(
-        url=args.url,
-        token=args.token,
-        persona=args.persona,
-        workers=args.workers,
-        turns=args.turns,
-        messages=messages,
-        timeout_seconds=args.timeout_seconds,
-        insecure_tls=args.insecure_tls,
-        inject_delay_ms=args.inject_delay_ms,
-        inject_invalid_rate=args.inject_invalid_rate,
-        inject_disconnect_rate=args.inject_disconnect_rate,
-        seed=args.seed,
-    )
     try:
+        audio = (
+            _load_audio_fixture(
+                args.audio_wav,
+                tail_silence_ms=args.audio_tail_silence_ms,
+            )
+            if args.audio_wav is not None
+            else None
+        )
+        config = BenchmarkConfig(
+            url=args.url,
+            token=args.token,
+            persona=args.persona,
+            workers=args.workers,
+            turns=args.turns,
+            messages=messages,
+            timeout_seconds=args.timeout_seconds,
+            insecure_tls=args.insecure_tls,
+            inject_delay_ms=args.inject_delay_ms,
+            inject_invalid_rate=args.inject_invalid_rate,
+            inject_disconnect_rate=args.inject_disconnect_rate,
+            seed=args.seed,
+            audio=audio,
+            audio_pacing=args.audio_pacing,
+        )
         report = run_benchmark(config)
     except (ValueError, OSError, BenchmarkError) as exc:
         print(json.dumps({"fatal_error": _error_code(exc)}, separators=(",", ":")))

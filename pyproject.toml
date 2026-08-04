@@ -9,9 +9,26 @@ name = "echoweave-rtc"
 version = "0.2.0"
 description = "Consent-first realtime voice and digital-avatar agent orchestration."
 readme = "README.md"
-requires-python = ">=3.10"
-license = {text = "Apache-2.0"}
+requires-python = ">=3.10,<3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "LICENSES/*"]
 authors = [{name = "Linxiushen"}]
+keywords = [
+  "realtime-ai",
+  "voice-agent",
+  "digital-avatar",
+  "websocket",
+  "consent",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: FastAPI",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
 dependencies = [
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
@@ -42,6 +59,13 @@ silero-v5 = [
   "numpy>=1.26,<3",
   "onnxruntime>=1.20,<2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Linxiushen/echoweave-rtc"
+Repository = "https://github.com/Linxiushen/echoweave-rtc.git"
+Issues = "https://github.com/Linxiushen/echoweave-rtc/issues"
+Documentation = "https://github.com/Linxiushen/echoweave-rtc/tree/main/docs"
+Security = "https://github.com/Linxiushen/echoweave-rtc/security/policy"
 
 [project.scripts]
 echoweave = "echoweave.cli:main"
