@@ -1,0 +1,9 @@
+services:
+  control-plane:
+    build: .
+    ports: ["8833:8833"]
+    volumes: ["fleet-state:/state"]
+    restart: unless-stopped
+volumes:
+  fleet-state:
+
