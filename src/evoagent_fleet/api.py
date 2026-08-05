@@ -39,7 +39,7 @@ def create_app(
 ) -> FastAPI:
     store = Store(database)
     orchestrator = Orchestrator(store, artifacts)
-    app = FastAPI(title="EvoAgent Fleet", version="0.1.0")
+    app = FastAPI(title="EvoAgent Fleet", version="0.1.1")
     app.state.store = store
     app.state.orchestrator = orchestrator
 

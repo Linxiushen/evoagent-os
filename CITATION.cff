@@ -4,8 +4,7 @@ message: If this software supports your work, please cite the repository release
 type: software
 authors:
   - name: EvoAgent Fleet Contributors
-version: 0.1.0
+version: 0.1.1
 date-released: 2026-08-05
 url: https://github.com/Linxiushen/evoagent-fleet
 license: Apache-2.0
-
