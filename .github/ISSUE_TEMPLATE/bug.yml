@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible runtime, trace, CLI, or workbench problem.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the observed and expected behavior.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: HarnessLab version
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include commands, a redacted trace artifact, or a small fixture.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, adapter, and relevant optional dependencies.
+    validations:
+      required: true

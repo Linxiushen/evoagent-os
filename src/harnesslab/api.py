@@ -11,11 +11,23 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from harnesslab import __version__
-from harnesslab.adapters import DeepSeekAPIAdapter, DemoAdapter, OpenAICompatibleAdapter
+from harnesslab.adapters import (
+    DeepSeekAPIAdapter,
+    DemoAdapter,
+    OpenAICompatibleAdapter,
+    RegressionFixtureAdapter,
+)
 from harnesslab.conformance import ConformanceReport, run_conformance
-from harnesslab.models import RunRecord, RunRequest
+from harnesslab.models import RunRecord, RunRequest, TraceCompareRequest
 from harnesslab.runtime import HarnessRuntime
 from harnesslab.tools import build_demo_registry
+from harnesslab.trace_contract import (
+    TRACE_CONTRACT_VERSION,
+    TraceArtifact,
+    TraceComparison,
+    build_trace_artifact,
+    compare_trace_artifacts,
+)
 
 STATIC_DIR = Path(__file__).parent / "static"
 TERMINAL_EVENTS = {"run.completed", "run.failed", "run.cancelled"}
@@ -24,6 +36,7 @@ TERMINAL_EVENTS = {"run.completed", "run.failed", "run.cancelled"}
 def build_runtime() -> HarnessRuntime:
     runtime = HarnessRuntime(build_demo_registry())
     runtime.register_adapter(DemoAdapter())
+    runtime.register_adapter(RegressionFixtureAdapter())
     if api_key := os.getenv("DEEPSEEK_API_KEY"):
         runtime.register_adapter(DeepSeekAPIAdapter(api_key=api_key))
     if base_url := os.getenv("HARNESSLAB_BASE_URL"):
@@ -45,7 +58,12 @@ async def lifespan(app: FastAPI):
         adapter_name="demo",
     )
     app.state.conformance = await run_conformance(runtime, "demo")
+    regression = await runtime.run(
+        "Review the checkout authorization change and report the highest-risk regression.",
+        adapter_name="regression-fixture",
+    )
     app.state.featured_run_id = seed.id
+    app.state.regression_run_id = regression.id
     yield
 
 
@@ -71,10 +89,13 @@ def create_app(runtime: HarnessRuntime | None = None, *, seed_demo: bool = True)
         return {
             "name": "HarnessLab",
             "version": __version__,
+            "mode": "runtime",
+            "trace_contract": TRACE_CONTRACT_VERSION,
             "protocol_status": "adapter-ready",
             "adapters": list(active_runtime.adapters),
             "tools": [spec.model_dump() for spec in active_runtime.tools.specs()],
             "featured_run_id": getattr(app.state, "featured_run_id", None),
+            "regression_run_id": getattr(app.state, "regression_run_id", None),
         }
 
     @app.get("/api/runs", response_model=list[RunRecord])
@@ -87,6 +108,26 @@ def create_app(runtime: HarnessRuntime | None = None, *, seed_demo: bool = True)
             return app.state.runtime.get_run(run_id)
         except LookupError as exc:
             raise HTTPException(status_code=404, detail="Run not found") from exc
+
+    @app.get("/api/runs/{run_id}/artifact", response_model=TraceArtifact)
+    async def export_run(run_id: str) -> TraceArtifact:
+        try:
+            return build_trace_artifact(app.state.runtime.get_run(run_id))
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+
+    @app.post("/api/compare", response_model=TraceComparison)
+    async def compare_runs(request: TraceCompareRequest) -> TraceComparison:
+        try:
+            baseline = build_trace_artifact(
+                app.state.runtime.get_run(request.baseline_run_id)
+            )
+            candidate = build_trace_artifact(
+                app.state.runtime.get_run(request.candidate_run_id)
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
+        return compare_trace_artifacts(baseline, candidate)
 
     @app.post("/api/runs", response_model=RunRecord, status_code=202)
     async def create_run(request: RunRequest) -> RunRecord:

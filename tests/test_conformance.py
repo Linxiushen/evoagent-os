@@ -15,6 +15,5 @@ async def test_demo_adapter_passes_reference_matrix() -> None:
 
     report = await run_conformance(runtime)
 
-    assert report.passed == report.total == 6
+    assert report.passed == report.total == 10
     assert {check.status for check in report.checks} == {"passed"}
-

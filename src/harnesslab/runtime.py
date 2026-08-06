@@ -9,6 +9,7 @@ from harnesslab.adapters.base import HarnessAdapter
 from harnesslab.events import EventBus
 from harnesslab.models import Message, RunRecord, RunStatus, ToolCall, TraceEvent, utc_now
 from harnesslab.tools import ToolRegistry
+from harnesslab.trace_contract import redact_data
 
 
 class HarnessRuntime:
@@ -43,7 +44,12 @@ class HarnessRuntime:
         payload: dict[str, Any] | None = None,
         duration_ms: float | None = None,
     ) -> TraceEvent:
-        event = await self.events.publish(run.id, event_type, payload, duration_ms)
+        event = await self.events.publish(
+            run.id,
+            event_type,
+            redact_data(payload or {}),
+            duration_ms,
+        )
         run.events.append(event)
         return event
 
@@ -72,7 +78,7 @@ class HarnessRuntime:
                 ),
                 Message(role="user", content=task),
             ],
-            metadata={"max_turns": max_turns},
+            metadata={"max_turns": max_turns, "message_count": 2},
         )
         self.runs[run.id] = run
         await self._emit(
@@ -117,6 +123,7 @@ class HarnessRuntime:
                         ),
                     )
                 )
+                run.metadata["message_count"] = len(run.messages)
 
                 if not turn.tool_calls:
                     run.answer = turn.text
@@ -135,7 +142,7 @@ class HarnessRuntime:
             raise RuntimeError(f"Maximum turn limit reached ({max_turns})")
         except Exception as exc:
             run.status = RunStatus.FAILED
-            run.error = str(exc)
+            run.error = redact_data(str(exc))
             run.completed_at = utc_now()
             await self._emit(run, "run.failed", {"error": str(exc)})
             return run
@@ -154,6 +161,16 @@ class HarnessRuntime:
             },
         )
         if not spec.read_only:
+            await self._emit(
+                run,
+                "tool.denied",
+                {
+                    "call_id": call.id,
+                    "name": call.name,
+                    "policy": "fail-closed",
+                    "reason": "explicit approval provider required",
+                },
+            )
             raise PermissionError(
                 f"Tool '{call.name}' requires an explicit approval provider; fail-closed by default"
             )
@@ -179,6 +196,7 @@ class HarnessRuntime:
                 content=json.dumps(result, ensure_ascii=False, separators=(",", ":")),
             )
         )
+        run.metadata["message_count"] = len(run.messages)
 
     @staticmethod
     def _openai_tool_call(call: ToolCall) -> dict[str, Any]:

@@ -4,13 +4,22 @@ build-backend = "hatchling.build"
 
 [project]
 name = "harnesslab"
-version = "0.1.0"
-description = "A protocol-first conformance lab and trace console for agent harnesses."
+version = "0.2.0"
+description = "Record, diff, and verify agent harness traces as executable protocol contracts."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Linxiushen" }]
-keywords = ["agents", "harness", "mcp", "deepseek", "conformance", "observability"]
+keywords = [
+  "agents",
+  "agent-harness",
+  "mcp",
+  "deepseek",
+  "conformance",
+  "observability",
+  "trace",
+  "regression-testing",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "License :: OSI Approved :: MIT License",
@@ -40,12 +49,25 @@ harnesslab = "harnesslab.cli:main"
 Homepage = "https://github.com/Linxiushen/harnesslab"
 Repository = "https://github.com/Linxiushen/harnesslab"
 Issues = "https://github.com/Linxiushen/harnesslab/issues"
+Documentation = "https://github.com/Linxiushen/harnesslab/blob/main/docs/TRACE_CONTRACT.md"
+Changelog = "https://github.com/Linxiushen/harnesslab/blob/main/CHANGELOG.md"
+Demo = "https://linxiushen.github.io/harnesslab/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/harnesslab"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/harnesslab", "tests", "examples", "docs", "README.md", "LICENSE"]
+include = [
+  "src/harnesslab",
+  "tests",
+  "examples",
+  "docs",
+  "README.md",
+  "CHANGELOG.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
+  "LICENSE",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -57,4 +79,3 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-

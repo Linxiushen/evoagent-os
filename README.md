@@ -1,82 +1,132 @@
 # HarnessLab
 
-**A protocol-first conformance lab and trace console for agent harnesses.**
+**Record, diff, and gate agent harness behavior as an executable trace contract.**
 
 [![CI](https://github.com/Linxiushen/harnesslab/actions/workflows/ci.yml/badge.svg)](https://github.com/Linxiushen/harnesslab/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Linxiushen/harnesslab)](https://github.com/Linxiushen/harnesslab/releases)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-275dad)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-12835f)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Linxiushen/harnesslab?style=social)](https://github.com/Linxiushen/harnesslab/stargazers)
 
-HarnessLab makes an agent loop observable and testable at the protocol boundary: model turns,
-tool calls, policy decisions, results, and terminal states are retained as one ordered event
-stream. It includes a live trace console, a deterministic offline adapter, an OpenAI-compatible
-adapter, an optional MCP stdio bridge, and an executable conformance matrix.
+[Live demo](https://linxiushen.github.io/harnesslab/) · [Quickstart](#30-second-quickstart) · [Trace Contract](docs/TRACE_CONTRACT.md) ·
+[CLI](#cli) · [DeepSeek readiness](#deepseek-harness-readiness) ·
+[中文说明](docs/README.zh-CN.md)
+
+Agent runs can look correct while their control flow quietly regresses: a tool executes before
+approval, a call no longer receives a correlated result, or a terminal event appears twice.
+HarnessLab turns that behavior into a portable `harnesslab.trace/v1` artifact with stable
+fingerprints, structural diffs, and CI exit codes.
 
 > [!IMPORTANT]
-> DeepSeek Harness has not published a protocol at the time of writing. This project does not
-> claim official or preview compatibility. The discovery probe is deliberately isolated so a
-> real adapter can be implemented against the first published specification without rewriting the
-> runtime, UI, or tests.
+> DeepSeek Harness has not published a protocol at the time of writing. HarnessLab does not claim
+> official or preview compatibility. The discovery boundary is isolated so integration can be
+> implemented against published fixtures instead of a guessed wire format.
 
-![HarnessLab execution trace](docs/console.png)
+![HarnessLab Trace Contract regression diff](docs/regression.png)
 
-## Run it
+## 30-second quickstart
+
+The reference adapter is deterministic, offline, and needs no model key.
+The workbench also seeds a clearly labeled regression fixture so the diff surface demonstrates a
+real breaking tool-path change immediately.
 
 ```bash
+git clone https://github.com/Linxiushen/harnesslab.git
+cd harnesslab
 python -m venv .venv
-.venv/Scripts/pip install -e ".[dev]"  # Windows
-harnesslab check
-harnesslab serve
 ```
 
-Open [http://127.0.0.1:4318](http://127.0.0.1:4318). The reference run is deterministic and does
-not need a model key or network access.
+Windows:
+
+```powershell
+.venv\Scripts\pip install -e ".[dev]"
+.venv\Scripts\harnesslab snapshot "Review the checkout authorization change" -o baseline.trace.json
+.venv\Scripts\harnesslab verify baseline.trace.json
+.venv\Scripts\harnesslab serve
+```
 
 macOS and Linux:
 
 ```bash
-python -m venv .venv
 .venv/bin/pip install -e ".[dev]"
+.venv/bin/harnesslab snapshot "Review the checkout authorization change" -o baseline.trace.json
+.venv/bin/harnesslab verify baseline.trace.json
 .venv/bin/harnesslab serve
 ```
 
-Docker is also supported:
+`verify` exits non-zero on lifecycle, tool-path, policy-path, terminal-state, or invariant drift.
+Open [http://127.0.0.1:4318](http://127.0.0.1:4318) for the live workbench.
 
-```bash
-docker compose up --build
+```text
+compatible: true
+protocol_score: 100
+baseline_fingerprint: sha256:e5b1f3...
+candidate_fingerprint: sha256:e5b1f3...
+differences: []
 ```
 
-## What is executable today
+## Why this is different
 
-| Surface | Status | Contract |
-| --- | --- | --- |
-| Agent loop | Ready | Multi-turn model/tool loop with a hard turn limit |
-| Trace stream | Ready | Ordered events over SSE with correlated call IDs |
-| Tool policy | Ready | Read-only auto approval; side effects fail closed |
-| Conformance | Ready | Six CI-runnable protocol invariants |
-| OpenAI-compatible API | Ready | Chat completions and function tools |
-| DeepSeek public API | Ready | Enabled only when `DEEPSEEK_API_KEY` is set |
-| MCP stdio | Optional | Official Python SDK via `pip install -e ".[mcp]"` |
-| DeepSeek Harness | Adapter-ready | No speculative wire format or compatibility claim |
+| Surface | What it answers | CI gate | Offline reference |
+| --- | --- | --- | --- |
+| Application logs | What strings were printed? | Rarely | Varies |
+| Model evals | Was the final answer good? | Yes | Often |
+| Hosted agent observability | What happened in a hosted run? | Vendor-specific | Usually no |
+| **HarnessLab** | **Did the harness preserve its protocol and policy invariants?** | **Yes** | **Yes** |
+
+HarnessLab is not another prompt scorer. It tests the orchestration layer between a model turn and
+the final answer: ordered lifecycle events, tool correlation, approval decisions, and terminal
+semantics.
+
+## Trace Contract v1
+
+Every exported artifact contains:
+
+- A monotonic lifecycle event stream.
+- Model, tool, approval, denial, and terminal paths.
+- A protocol fingerprint that ignores timestamps, durations, token counts, and free-form text.
+- A content fingerprint over stable, redacted event payloads.
+- Contract violations such as missing policy decisions or duplicate terminal events.
+- The redacted evidence needed to reproduce a structural comparison.
+
+Common credential keys and inline bearer tokens are removed before events reach SSE, the UI, or a
+Trace Contract artifact. Raw model context remains internal to the runtime and is not serialized by
+the API.
+
+See [docs/TRACE_CONTRACT.md](docs/TRACE_CONTRACT.md) for the artifact schema and compatibility
+rules.
+
+## Workbench
+
+The local console is a working engineering surface, not a static mockup:
+
+- **Trace explorer** streams ordered events over SSE and correlates every tool call.
+- **Regression diff** compares two runs and separates breaking protocol drift from payload notice.
+- **Conformance** executes ten provider-independent invariants.
+- **Adapters** shows active provider boundaries and future protocol discovery status.
+- **Tool registry** exposes JSON Schema contracts and fail-closed policy state.
+
+![HarnessLab execution trace](docs/console.png)
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI["Trace console"] -->|REST + SSE| RT["HarnessRuntime"]
-    CLI["CLI / CI"] --> RT
-    RT --> AD["HarnessAdapter"]
-    AD --> DEMO["Deterministic fixture"]
-    AD --> COMPAT["OpenAI-compatible"]
-    AD -. published spec .-> DSH["DeepSeek Harness adapter"]
-    RT --> POLICY["Approval boundary"]
-    POLICY --> TOOLS["Local tools"]
-    POLICY --> MCP["MCP stdio"]
-    RT --> BUS["Ordered event bus"]
-    BUS --> UI
-    BUS --> CHECKS["Conformance matrix"]
+    CI["CI / CLI"] --> CONTRACT["Trace Contract v1"]
+    UI["Trace workbench"] --> RT["HarnessRuntime"]
+    RT --> ADAPTER["HarnessAdapter"]
+    ADAPTER --> DEMO["Deterministic fixture"]
+    ADAPTER --> API["OpenAI-compatible / DeepSeek API"]
+    ADAPTER -. published fixture .-> DSH["DeepSeek Harness"]
+    RT --> POLICY["Fail-closed policy boundary"]
+    POLICY --> TOOLS["Local tools / MCP"]
+    RT --> EVENTS["Ordered, redacted event bus"]
+    EVENTS --> CONTRACT
+    CONTRACT --> DIFF["Fingerprint + structural diff"]
+    DIFF --> CI
 ```
 
-The adapter contract is intentionally small:
+Provider-specific data stops at a deliberately small adapter contract:
 
 ```python
 class HarnessAdapter(Protocol):
@@ -89,93 +139,78 @@ class HarnessAdapter(Protocol):
     ) -> AdapterTurn: ...
 ```
 
-Provider-specific data stops at this boundary. `HarnessRuntime` owns iteration, tool policy,
-correlation, terminal states, and events, while adapters own only wire translation.
+The runtime owns iteration, policy, tool correlation, event order, and terminal state. Adapters own
+only wire translation.
 
-## Conformance matrix
+## CLI
 
-```bash
-$ harnesslab check
-{
-  "adapter": "demo",
-  "passed": 6,
-  "total": 6,
-  "checks": [
-    {"id": "schema-fidelity", "status": "passed"},
-    {"id": "ordered-events", "status": "passed"},
-    {"id": "tool-roundtrip", "status": "passed"},
-    {"id": "approval-boundary", "status": "passed"},
-    {"id": "terminal-state", "status": "passed"},
-    {"id": "evidence-answer", "status": "passed"}
-  ]
-}
-```
+| Command | Purpose |
+| --- | --- |
+| `harnesslab run "..."` | Run one task and print the resulting record |
+| `harnesslab snapshot "..." -o trace.json` | Record a portable baseline |
+| `harnesslab verify trace.json` | Re-run and fail on structural regression |
+| `harnesslab compare before.json after.json` | Compare two saved artifacts without a model call |
+| `harnesslab check --adapter demo` | Execute the conformance matrix |
+| `harnesslab serve` | Start the API and workbench on port 4318 |
+| `harnesslab probe URL` | Inspect a future capability document without assuming its protocol |
 
-Each adapter can run the same matrix. The deterministic fixture is the reference implementation,
-so failures can be distinguished from provider availability or nondeterministic model behavior.
+Add `--strict-content` to `verify` or `compare` when stable payload changes must also fail CI.
 
-## DeepSeek API
+## API
 
-The current public DeepSeek API uses the same runtime path as any compatible endpoint:
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/api/runs` | Start a run |
+| `GET` | `/api/runs/{id}` | Inspect a run and its redacted event stream |
+| `GET` | `/api/runs/{id}/events` | Consume live SSE events |
+| `GET` | `/api/runs/{id}/artifact` | Export a Trace Contract artifact |
+| `POST` | `/api/compare` | Compare two retained runs |
+| `POST` | `/api/conformance` | Execute the adapter matrix |
+| `GET` | `/healthz` | Check service version and health |
+
+OpenAPI is available at `/docs` while the server is running.
+
+## Adapters and MCP
+
+The public DeepSeek API uses the same runtime path as any compatible endpoint:
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "..."
 harnesslab serve
 ```
 
-The API key is read at process start, sent only to the provider, and excluded from trace events.
+Any OpenAI-compatible endpoint can be configured with `HARNESSLAB_BASE_URL`,
+`HARNESSLAB_API_KEY`, and `HARNESSLAB_MODEL`.
 
-For any other compatible endpoint:
-
-```powershell
-$env:HARNESSLAB_BASE_URL = "http://127.0.0.1:8000/v1"
-$env:HARNESSLAB_API_KEY = "..."
-$env:HARNESSLAB_MODEL = "your-model"
-harnesslab serve
-```
-
-## MCP bridge
-
-Install the optional dependency and run the included server:
+For MCP stdio tools:
 
 ```bash
 pip install -e ".[mcp]"
 python examples/mcp_server.py
 ```
 
-`MCPStdioProvider` discovers remote tool schemas through the official SDK and namespaces them
-before registration. MCP tools default to side-effecting because remote annotations are not always
-present; an approval provider must explicitly relax that policy.
+MCP tools default to side-effecting because remote annotations are not always present. They do not
+execute until an approval provider explicitly relaxes that boundary.
 
-## First-day DeepSeek Harness integration plan
+## DeepSeek Harness readiness
 
-1. Freeze the published capability and message fixtures in `tests/fixtures/`.
+When a real DSH specification or preview fixture becomes available, the integration path is:
+
+1. Freeze capability, message, lifecycle, and error fixtures.
 2. Implement one `HarnessAdapter` beside `DeepSeekHarnessProbe`.
-3. Map native lifecycle events to HarnessLab's stable event vocabulary.
-4. Run the same conformance matrix locally and in CI.
-5. Add protocol-specific checks without weakening the generic six.
-6. Ship an adapter extra instead of coupling the runtime to a private preview dependency.
+3. Map native lifecycle events to the stable Trace Contract vocabulary.
+4. Run the generic conformance suite and recorded regression baselines.
+5. Add DSH-specific checks without weakening the generic invariants.
+6. Publish only the compatibility scope proven by those fixtures.
 
-This sequence keeps every compatibility claim tied to an executable fixture.
+This keeps every compatibility claim executable and reviewable.
 
-## API
+## Contributing
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/meta` | Adapters, tools, and protocol status |
-| `POST` | `/api/runs` | Start a run |
-| `GET` | `/api/runs/{id}` | Inspect a run and its retained trace |
-| `GET` | `/api/runs/{id}/events` | Consume live server-sent events |
-| `POST` | `/api/conformance` | Run the adapter matrix |
-| `GET` | `/healthz` | Health and version |
+Adapter fixtures, protocol edge cases, exporters, and policy providers are welcome. Start with
+[CONTRIBUTING.md](CONTRIBUTING.md) and open an adapter request or bug report.
 
-OpenAPI is available at `/docs` while the server is running.
-
-## Project status
-
-HarnessLab is an early open-source implementation built for protocol review and integration work.
-See [CONTRIBUTING.md](CONTRIBUTING.md) for adapter requirements and [SECURITY.md](SECURITY.md) for
-the trust model.
+If HarnessLab would catch a regression in your agent runtime, a star helps other harness engineers
+find the project. More importantly, open an issue with the trace invariant your runtime needs.
 
 MIT licensed.
-

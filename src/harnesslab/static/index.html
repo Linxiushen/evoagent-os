@@ -6,19 +6,21 @@
     <meta name="theme-color" content="#171918" />
     <title>HarnessLab</title>
     <link rel="preconnect" href="https://unpkg.com" />
-    <link rel="stylesheet" href="/static/styles.css?v=2" />
+    <link rel="stylesheet" href="./static/styles.css?v=3" />
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-    <script src="/static/app.js?v=2" defer></script>
+    <script src="./static/demo-data.js?v=1" defer></script>
+    <script src="./static/app.js?v=3" defer></script>
   </head>
   <body>
     <aside class="sidebar">
-      <a class="brand" href="/" aria-label="HarnessLab home">
+      <a class="brand" href="./" aria-label="HarnessLab home">
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span class="brand-copy"><strong>HarnessLab</strong><small>protocol workbench</small></span>
       </a>
 
       <nav class="primary-nav" aria-label="Workspace">
         <button class="nav-item active" data-view="trace"><i data-lucide="git-branch"></i><span>Trace explorer</span></button>
+        <button class="nav-item" data-view="regression"><i data-lucide="diff"></i><span>Regression diff</span></button>
         <button class="nav-item" data-view="conformance"><i data-lucide="badge-check"></i><span>Conformance</span></button>
         <button class="nav-item" data-view="adapters"><i data-lucide="waypoints"></i><span>Adapters</span></button>
         <button class="nav-item" data-view="tools"><i data-lucide="wrench"></i><span>Tool registry</span></button>
@@ -39,7 +41,7 @@
           <h1 id="view-title">Execution trace</h1>
         </div>
         <div class="topbar-actions">
-          <span class="version" id="version">v0.1.0</span>
+          <span class="version" id="version">v0.2.0</span>
           <button class="icon-button" id="refresh" title="Refresh data" aria-label="Refresh data"><i data-lucide="refresh-cw"></i></button>
         </div>
       </header>
@@ -76,7 +78,10 @@
                 <div class="run-id-line"><code id="selected-run-id">-</code><button class="copy-button" id="copy-id" title="Copy run ID" aria-label="Copy run ID"><i data-lucide="copy"></i></button></div>
                 <h2 id="selected-task">Select a run</h2>
               </div>
-              <span id="selected-status" class="status">idle</span>
+              <div class="trace-header-actions">
+                <button class="icon-button" id="export-trace" title="Export Trace Contract" aria-label="Export Trace Contract"><i data-lucide="download"></i></button>
+                <span id="selected-status" class="status">idle</span>
+              </div>
             </div>
             <div class="trace-controls">
               <div class="segmented" role="group" aria-label="Event filter">
@@ -97,6 +102,40 @@
               <div id="run-answer">No completed output.</div>
             </div>
           </aside>
+        </div>
+      </section>
+
+      <section id="regression-view" class="view">
+        <div class="compare-toolbar">
+          <label>
+            <span>BASELINE</span>
+            <select id="baseline-run" aria-label="Baseline run"></select>
+          </label>
+          <i data-lucide="arrow-right"></i>
+          <label>
+            <span>CANDIDATE</span>
+            <select id="candidate-run" aria-label="Candidate run"></select>
+          </label>
+          <button class="primary-button" id="compare-runs"><i data-lucide="diff"></i><span>Compare</span></button>
+        </div>
+
+        <div class="compare-summary">
+          <div class="compare-score"><strong id="compare-score">-</strong><span>protocol score</span></div>
+          <div><span>Verdict</span><strong id="compare-verdict">Select two runs</strong></div>
+          <div><span>Trace Contract</span><strong id="contract-version">harnesslab.trace/v1</strong></div>
+          <div><span>Content</span><strong id="content-verdict">-</strong></div>
+        </div>
+
+        <div class="fingerprint-grid">
+          <div><span>BASELINE FINGERPRINT</span><code id="baseline-fingerprint">-</code></div>
+          <div><span>CANDIDATE FINGERPRINT</span><code id="candidate-fingerprint">-</code></div>
+        </div>
+
+        <div class="data-table-wrap">
+          <table class="data-table diff-table">
+            <thead><tr><th>Area</th><th>Severity</th><th>Change</th><th>Expected / Actual</th></tr></thead>
+            <tbody id="diff-table"></tbody>
+          </table>
         </div>
       </section>
 

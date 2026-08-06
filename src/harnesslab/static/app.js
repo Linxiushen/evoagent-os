@@ -3,11 +3,13 @@ const state = {
   runs: [],
   selected: null,
   conformance: null,
+  comparison: null,
   filter: "all",
 };
 
 const viewLabels = {
   trace: ["RUNS / LIVE TRACE", "Execution trace"],
+  regression: ["QUALITY / REGRESSION", "Trace contract diff"],
   conformance: ["QUALITY / PROTOCOL", "Conformance matrix"],
   adapters: ["RUNTIME / PROVIDERS", "Adapter registry"],
   tools: ["RUNTIME / CAPABILITIES", "Tool registry"],
@@ -21,6 +23,7 @@ const eventMeta = {
   "model.completed": ["Model response", "model", "sparkles"],
   "tool.requested": ["Tool request", "tool", "wrench"],
   "tool.approved": ["Policy approval", "tool", "shield-check"],
+  "tool.denied": ["Policy denial", "tool", "shield-x"],
   "tool.completed": ["Tool result", "tool", "package-check"],
 };
 
@@ -64,6 +67,7 @@ function compactPayload(event) {
 }
 
 async function request(url, options) {
+  if (window.HarnessLabDemo?.active) return window.HarnessLabDemo.request(url, options);
   const response = await fetch(url, options);
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
@@ -90,6 +94,7 @@ function render() {
   renderMeta();
   renderRuns();
   renderSelected();
+  renderComparison();
   renderConformance();
   renderAdapters();
   renderTools();
@@ -99,6 +104,9 @@ function render() {
 function renderMeta() {
   if (!state.meta) return;
   $("#version").textContent = `v${state.meta.version}`;
+  $(".live-state span:last-child").textContent = state.meta.mode === "static-demo"
+    ? "Static demo"
+    : "Runtime online";
   const select = $("#adapter-select");
   const current = select.value;
   select.innerHTML = state.meta.adapters.map((name) => `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join("");
@@ -135,7 +143,7 @@ function renderSelected() {
     <dt>Turns</dt><dd>${escapeHTML(run.metadata?.max_turns || "-")} max</dd>
     <dt>Started</dt><dd>${formatTime(run.started_at)}</dd>
     <dt>Duration</dt><dd>${duration(run)}</dd>
-    <dt>Messages</dt><dd>${run.messages?.length || 0}</dd>
+    <dt>Messages</dt><dd>${run.metadata?.message_count || 0}</dd>
     <dt>Events</dt><dd>${run.events?.length || 0}</dd>
   `;
   $("#run-answer").textContent = run.answer || run.error || "No completed output.";
@@ -162,17 +170,65 @@ function renderConformance() {
   if (!report) return;
   $("#score-value").textContent = `${report.passed}/${report.total}`;
   $("#matrix-visual").innerHTML = report.checks.map((check, index) => `
-    <div class="matrix-cell ${escapeHTML(check.status)}"><span>0${index + 1}</span><strong>${escapeHTML(check.title)}</strong></div>
+    <div class="matrix-cell ${escapeHTML(check.status)}"><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHTML(check.title)}</strong></div>
   `).join("");
   $("#check-table").innerHTML = report.checks.map((check) => `
     <tr><td><strong>${escapeHTML(check.title)}</strong><br><code>${escapeHTML(check.id)}</code></td><td><span class="check-badge ${check.status === "failed" ? "failed" : ""}">${escapeHTML(check.status)}</span></td><td>${escapeHTML(check.evidence)}</td></tr>
   `).join("");
 }
 
+function renderComparison() {
+  const baseline = $("#baseline-run");
+  const candidate = $("#candidate-run");
+  const options = state.runs.map((run) => (
+    `<option value="${escapeHTML(run.id)}">${escapeHTML(run.id.replace("run_", "#"))} / ${escapeHTML(run.adapter)}</option>`
+  )).join("");
+  const previousBaseline = baseline.value;
+  const previousCandidate = candidate.value;
+  baseline.innerHTML = options;
+  candidate.innerHTML = options;
+  baseline.value = state.runs.some((run) => run.id === previousBaseline)
+    ? previousBaseline
+    : (state.runs[1]?.id || state.runs[0]?.id || "");
+  candidate.value = state.runs.some((run) => run.id === previousCandidate)
+    ? previousCandidate
+    : (state.runs[0]?.id || "");
+  $("#compare-runs").disabled = state.runs.length === 0;
+
+  const result = state.comparison;
+  if (!result) {
+    $("#diff-table").innerHTML = '<tr><td colspan="4" class="table-empty">Run a comparison to inspect structural drift.</td></tr>';
+    return;
+  }
+  $("#compare-score").textContent = `${result.protocol_score}%`;
+  $("#compare-verdict").textContent = result.compatible ? "Compatible" : "Breaking change";
+  $("#compare-verdict").className = result.compatible ? "verdict-ok" : "verdict-bad";
+  $("#contract-version").textContent = result.contract_version;
+  $("#content-verdict").textContent = result.content_match ? "Exact match" : "Payload changed";
+  $("#baseline-fingerprint").textContent = result.baseline_fingerprint;
+  $("#candidate-fingerprint").textContent = result.candidate_fingerprint;
+  $("#diff-table").innerHTML = result.differences.length
+    ? result.differences.map((difference) => `
+      <tr>
+        <td><strong>${escapeHTML(difference.area)}</strong></td>
+        <td><span class="check-badge ${difference.severity === "breaking" ? "failed" : "notice"}">${escapeHTML(difference.severity)}</span></td>
+        <td>${escapeHTML(difference.detail)}</td>
+        <td><code>${escapeHTML(compactValue(difference.expected))}</code><span class="diff-arrow">-&gt;</span><code>${escapeHTML(compactValue(difference.actual))}</code></td>
+      </tr>
+    `).join("")
+    : '<tr><td colspan="4" class="table-empty success-empty">No structural or content drift detected.</td></tr>';
+}
+
+function compactValue(value) {
+  const encoded = typeof value === "string" ? value : JSON.stringify(value);
+  return encoded.length > 180 ? `${encoded.slice(0, 177)}...` : encoded;
+}
+
 function renderAdapters() {
   if (!state.meta) return;
   const copy = {
     demo: ["Deterministic fixture", "Offline reference adapter for repeatable traces and CI."],
+    "regression-fixture": ["Regression fixture", "Deliberately skips a tool step to prove structural drift detection."],
     "deepseek-api": ["DeepSeek API", "Public chat-completions adapter enabled by DEEPSEEK_API_KEY."],
     "openai-compatible": ["Compatible endpoint", "Environment-configured adapter for compatible model APIs."],
   };
@@ -243,7 +299,7 @@ $("#run-form").addEventListener("submit", async (event) => {
     state.selected = run;
     renderRuns();
     renderSelected();
-    watchRun(run.id);
+    if (["queued", "running"].includes(run.status)) watchRun(run.id);
   } catch (error) {
     toast(error.message);
   } finally {
@@ -252,7 +308,8 @@ $("#run-form").addEventListener("submit", async (event) => {
 });
 
 $("#run-checks").addEventListener("click", async (event) => {
-  event.currentTarget.disabled = true;
+  const button = event.currentTarget;
+  button.disabled = true;
   try {
     state.conformance = await request("/api/conformance", { method: "POST" });
     renderConformance();
@@ -261,7 +318,45 @@ $("#run-checks").addEventListener("click", async (event) => {
   } catch (error) {
     toast(error.message);
   } finally {
-    event.currentTarget.disabled = false;
+    button.disabled = false;
+  }
+});
+
+$("#compare-runs").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    state.comparison = await request("/api/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        baseline_run_id: $("#baseline-run").value,
+        candidate_run_id: $("#candidate-run").value,
+      }),
+    });
+    renderComparison();
+    toast(state.comparison.compatible ? "Trace contract compatible" : "Breaking trace drift found");
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("#export-trace").addEventListener("click", async () => {
+  if (!state.selected) return;
+  try {
+    const artifact = await request(`/api/runs/${encodeURIComponent(state.selected.id)}/artifact`);
+    const blob = new Blob([JSON.stringify(artifact, null, 2)], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `${state.selected.id}.trace.json`;
+    link.click();
+    URL.revokeObjectURL(href);
+    toast("Trace Contract exported");
+  } catch (error) {
+    toast(error.message);
   }
 });
 
@@ -280,4 +375,3 @@ $$('.segmented button').forEach((button) => button.addEventListener("click", () 
 }));
 
 loadAll().catch((error) => toast(error.message));
-

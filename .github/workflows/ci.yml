@@ -24,4 +24,5 @@ jobs:
       - run: ruff check .
       - run: pytest -q
       - run: harnesslab check
-
+      - run: harnesslab snapshot "Review the checkout authorization change" -o baseline.trace.json
+      - run: harnesslab verify baseline.trace.json --strict-content

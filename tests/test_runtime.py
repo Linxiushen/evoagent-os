@@ -64,4 +64,5 @@ async def test_write_tool_fails_closed() -> None:
 
     assert run.status == RunStatus.FAILED
     assert "explicit approval provider" in (run.error or "")
+    assert any(event.type == "tool.denied" for event in runtime.events.history(run.id))
     assert not any(event.type == "tool.completed" for event in runtime.events.history(run.id))

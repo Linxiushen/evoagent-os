@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from harnesslab.models import RunStatus
 from harnesslab.runtime import HarnessRuntime
+from harnesslab.trace_contract import TraceArtifact, build_trace_artifact
 
 
 class ConformanceCheck(BaseModel):
@@ -33,6 +34,19 @@ async def run_conformance(
     requested = [event for event in events if event.type == "tool.requested"]
     completed = [event for event in events if event.type == "tool.completed"]
     schemas = runtime.tools.specs()
+    artifact = build_trace_artifact(run)
+    event_positions = {
+        (event.type, event.payload.get("call_id")): event.sequence
+        for event in events
+        if event.payload.get("call_id")
+    }
+    policy_ordered = all(
+        event_positions.get(("tool.requested", event.payload["call_id"]), 0)
+        < event.sequence
+        < event_positions.get(("tool.completed", event.payload["call_id"]), 10**9)
+        for event in events
+        if event.type == "tool.approved"
+    )
     checks = [
         _check(
             "schema-fidelity",
@@ -82,6 +96,31 @@ async def run_conformance(
             "Evidence-bearing answer",
             bool(run.answer) and "src/checkout/policy.py" in run.answer,
             "Final answer preserves file-level evidence from the tool result",
+        ),
+        _check(
+            "policy-order",
+            "Policy precedes execution",
+            policy_ordered,
+            "Every approval follows its request and precedes tool completion",
+        ),
+        _check(
+            "trace-contract",
+            "Trace Contract invariants",
+            not artifact.projection.violations,
+            f"{artifact.contract_version} projection has no violations",
+        ),
+        _check(
+            "artifact-roundtrip",
+            "Artifact round trip",
+            TraceArtifact.model_validate_json(artifact.model_dump_json()).protocol_fingerprint
+            == artifact.protocol_fingerprint,
+            "Portable artifact validates with an unchanged protocol fingerprint",
+        ),
+        _check(
+            "context-isolation",
+            "Raw context isolation",
+            "messages" not in run.model_dump(mode="json"),
+            "Serialized run records exclude raw model and tool context",
         ),
     ]
     passed = sum(check.status == "passed" for check in checks)

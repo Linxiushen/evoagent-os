@@ -81,7 +81,7 @@ class RunRecord(BaseModel):
     completed_at: datetime | None = None
     answer: str = ""
     error: str | None = None
-    messages: list[Message] = Field(default_factory=list)
+    messages: list[Message] = Field(default_factory=list, exclude=True)
     events: list[TraceEvent] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -90,6 +90,11 @@ class RunRequest(BaseModel):
     task: str = Field(min_length=3, max_length=4000)
     adapter: str = "demo"
     max_turns: int = Field(default=6, ge=1, le=20)
+
+
+class TraceCompareRequest(BaseModel):
+    baseline_run_id: str = Field(min_length=1)
+    candidate_run_id: str = Field(min_length=1)
 
 
 class CapabilityDocument(BaseModel):
