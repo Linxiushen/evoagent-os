@@ -1,0 +1,7 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY apps/worker /app
+RUN pip install --no-cache-dir .
+USER 65532:65532
+ENTRYPOINT ["evoagent-worker"]
+CMD ["--url", "http://control-plane:8765", "--capability", "research", "--capability", "analysis", "--capability", "writing", "--capability", "artifacts", "--capability", "citations"]

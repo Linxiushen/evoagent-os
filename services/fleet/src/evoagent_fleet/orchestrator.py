@@ -87,7 +87,7 @@ class Orchestrator:
             (worker.pool, now()),
         )
 
-    def claim(self, worker_id: str) -> dict[str, Any] | None:
+    def claim(self, worker_id: str, workflow_id: str | None = None) -> dict[str, Any] | None:
         self.sweep_expired()
         with self.store.lock:
             worker = self.store.connection.execute(
@@ -102,9 +102,16 @@ class Orchestrator:
             if active >= worker["max_concurrency"]:
                 return None
             capabilities = set(json.loads(worker["capabilities_json"]))
-            candidates = self.store.connection.execute(
-                "SELECT * FROM nodes WHERE status='queued' ORDER BY created_at,node_id"
-            ).fetchall()
+            if workflow_id:
+                candidates = self.store.connection.execute(
+                    """SELECT * FROM nodes WHERE status='queued' AND workflow_id=?
+                       ORDER BY created_at,node_id""",
+                    (workflow_id,),
+                ).fetchall()
+            else:
+                candidates = self.store.connection.execute(
+                    "SELECT * FROM nodes WHERE status='queued' ORDER BY created_at,node_id"
+                ).fetchall()
             selected = next(
                 (
                     row

@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evoagent-os"
+version = "0.1.0"
+description = "Governed control plane for durable, auditable, self-evolving agent teams"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{name = "EvoAgent OS Contributors"}]
+dependencies = [
+  "fastapi>=0.116,<1",
+  "httpx>=0.28,<1",
+  "pydantic>=2.11,<3",
+  "uvicorn>=0.35,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "numpy>=1.26,<3",
+  "pillow>=11,<13",
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+evoagent-os = "evoagent_os.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Linxiushen/evoagent-os"
+Repository = "https://github.com/Linxiushen/evoagent-os"
+Issues = "https://github.com/Linxiushen/evoagent-os/issues"
+
+[tool.setuptools]
+package-dir = {"" = "apps/control-plane/src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["apps/control-plane/src"]
+
+[tool.setuptools.package-data]
+evoagent_os = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = [
+  "apps/control-plane/src",
+  "packages/contracts/src",
+  "services/runtime/src",
+  "services/fleet/src",
+  "services/forge/src",
+  "services/observability/src",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S"]
+ignore = ["S101"]
