@@ -98,7 +98,7 @@ jobs:
         run: ruff check ${{ matrix.component.ruff_args }} ${{ matrix.component.lint }}
 
       - name: Pytest
-        run: pytest -q ${{ matrix.component.tests }}
+        run: python -m pytest -q ${{ matrix.component.tests }}
 
   example-contract:
     name: Validate example payloads
