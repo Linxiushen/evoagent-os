@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171d1c">
+  <meta name="description" content="EvoAgent OS control plane for operating agent fleets, workflows, skills, approvals, and evaluations.">
+  <title>EvoAgent OS | Control Plane</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2311775f'/%3E%3Ctext x='32' y='43' text-anchor='middle' font-family='Arial' font-size='36' font-weight='700' fill='white'%3EE%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script defer src="/assets/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">E</div>
+        <div class="brand-copy">
+          <strong>EvoAgent OS</strong>
+          <span>Control plane</span>
+        </div>
+        <button class="icon-button sidebar-close mobile-only" type="button" id="close-sidebar" aria-label="Close navigation" title="Close navigation">
+          <i data-lucide="x" aria-hidden="true"></i><span class="icon-fallback">x</span>
+        </button>
+      </div>
+
+      <nav class="primary-nav">
+        <p class="nav-label">Operate</p>
+        <button class="nav-item active" type="button" data-view="overview">
+          <i data-lucide="layout-dashboard" aria-hidden="true"></i><span>Overview</span>
+        </button>
+        <button class="nav-item" type="button" data-view="runs">
+          <i data-lucide="activity" aria-hidden="true"></i><span>Runs</span><span class="nav-count" id="nav-runs"></span>
+        </button>
+        <button class="nav-item" type="button" data-view="workflows">
+          <i data-lucide="workflow" aria-hidden="true"></i><span>Workflows</span><span class="nav-count" id="nav-workflows"></span>
+        </button>
+        <button class="nav-item" type="button" data-view="agents">
+          <i data-lucide="bot" aria-hidden="true"></i><span>Agents</span><span class="nav-count" id="nav-agents"></span>
+        </button>
+
+        <p class="nav-label">Govern</p>
+        <button class="nav-item" type="button" data-view="skills">
+          <i data-lucide="blocks" aria-hidden="true"></i><span>Skills</span><span class="nav-count" id="nav-skills"></span>
+        </button>
+        <button class="nav-item" type="button" data-view="approvals">
+          <i data-lucide="shield-check" aria-hidden="true"></i><span>Approvals</span><span class="nav-count attention" id="nav-approvals"></span>
+        </button>
+        <button class="nav-item" type="button" data-view="evaluations">
+          <i data-lucide="flask-conical" aria-hidden="true"></i><span>Evaluations</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="system-health">
+          <span class="health-dot" id="sidebar-health-dot" aria-hidden="true"></span>
+          <div>
+            <strong id="sidebar-health-label">Connecting</strong>
+            <span id="sidebar-health-meta">Control plane</span>
+          </div>
+        </div>
+        <span class="version-label">EvoAgent OS / v0.1</span>
+      </div>
+    </aside>
+
+    <div class="sidebar-scrim" id="sidebar-scrim" aria-hidden="true"></div>
+
+    <div class="workspace-shell">
+      <header class="topbar">
+        <div class="topbar-leading">
+          <button class="icon-button mobile-only" type="button" id="open-sidebar" aria-label="Open navigation" title="Open navigation">
+            <i data-lucide="menu" aria-hidden="true"></i><span class="icon-fallback">Menu</span>
+          </button>
+          <label class="workspace-picker" for="workspace-select">
+            <span>Workspace</span>
+            <select id="workspace-select" aria-label="Select workspace">
+              <option value="">Loading workspaces...</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="global-search" role="search">
+          <i data-lucide="search" aria-hidden="true"></i>
+          <input id="global-search" type="search" autocomplete="off" placeholder="Search runs, agents, workflows..." aria-label="Search current view">
+        </div>
+
+        <div class="topbar-actions">
+          <div class="api-status" id="api-status" title="API connection state">
+            <span class="health-dot" aria-hidden="true"></span>
+            <span>Connecting</span>
+          </div>
+          <button class="icon-button" type="button" id="refresh-button" aria-label="Refresh data" title="Refresh data">
+            <i data-lucide="refresh-cw" aria-hidden="true"></i><span class="icon-fallback">Refresh</span>
+          </button>
+          <button class="primary-button" type="button" id="launch-demo">
+            <i data-lucide="play" aria-hidden="true"></i><span>Launch demo</span>
+          </button>
+        </div>
+      </header>
+
+      <main id="main-content" tabindex="-1">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow" id="page-eyebrow">Fleet operations</p>
+            <h1 id="page-title">Overview</h1>
+            <p id="page-description">Live execution, quality, spend, and governance across your agent fleet.</p>
+          </div>
+          <div class="page-heading-actions" id="page-actions"></div>
+        </div>
+
+        <div class="connection-banner" id="connection-banner" role="alert" hidden>
+          <i data-lucide="wifi-off" aria-hidden="true"></i>
+          <div>
+            <strong>Control plane is unavailable</strong>
+            <span id="connection-error">Could not load current data.</span>
+          </div>
+          <button type="button" class="secondary-button" id="banner-retry">Retry</button>
+        </div>
+
+        <section class="view active" id="view-overview" data-view-panel="overview" aria-labelledby="page-title">
+          <div id="overview-content" class="view-content" aria-live="polite"></div>
+        </section>
+
+        <section class="view" id="view-runs" data-view-panel="runs" aria-labelledby="page-title" hidden>
+          <div id="runs-content" class="view-content" aria-live="polite"></div>
+        </section>
+
+        <section class="view" id="view-workflows" data-view-panel="workflows" aria-labelledby="page-title" hidden>
+          <div id="workflows-content" class="view-content" aria-live="polite"></div>
+        </section>
+
+        <section class="view" id="view-agents" data-view-panel="agents" aria-labelledby="page-title" hidden>
+          <div id="agents-content" class="view-content" aria-live="polite"></div>
+        </section>
+
+        <section class="view" id="view-skills" data-view-panel="skills" aria-labelledby="page-title" hidden>
+          <div id="skills-content" class="view-content" aria-live="polite"></div>
+        </section>
+
+        <section class="view" id="view-approvals" data-view-panel="approvals" aria-labelledby="page-title" hidden>
+          <div id="approvals-content" class="view-content" aria-live="polite"></div>
+        </section>
+
+        <section class="view" id="view-evaluations" data-view-panel="evaluations" aria-labelledby="page-title" hidden>
+          <div id="evaluations-content" class="view-content" aria-live="polite"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <dialog class="detail-dialog" id="detail-dialog">
+    <form method="dialog" class="dialog-shell">
+      <header class="dialog-header">
+        <div>
+          <p class="eyebrow" id="dialog-eyebrow">Details</p>
+          <h2 id="dialog-title">Run details</h2>
+        </div>
+        <button class="icon-button" type="submit" aria-label="Close details" title="Close">
+          <i data-lucide="x" aria-hidden="true"></i><span class="icon-fallback">Close</span>
+        </button>
+      </header>
+      <div class="dialog-body" id="dialog-body"></div>
+      <footer class="dialog-footer" id="dialog-footer">
+        <button class="secondary-button" type="submit">Close</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <noscript>
+    <div class="noscript-message">EvoAgent OS Control Plane requires JavaScript to load operational data.</div>
+  </noscript>
+</body>
+</html>
