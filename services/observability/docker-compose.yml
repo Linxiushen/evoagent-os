@@ -1,0 +1,8 @@
+services:
+  harnesslab:
+    build: .
+    ports:
+      - "4318:4318"
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+

@@ -1,0 +1,35 @@
+name: Adapter or invariant request
+description: Propose a public provider fixture, adapter, or Trace Contract invariant.
+title: "[adapter] "
+labels: ["adapter"]
+body:
+  - type: input
+    id: provider
+    attributes:
+      label: Provider or runtime
+      placeholder: Runtime name and public documentation URL
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Public contract or fixture
+      description: Link to a public specification or provide a credential-free fixture.
+    validations:
+      required: true
+  - type: textarea
+    id: invariant
+    attributes:
+      label: Behavior to prove
+      description: Describe the lifecycle, tool, policy, or terminal invariant.
+    validations:
+      required: true
+  - type: checkboxes
+    id: evidence
+    attributes:
+      label: Evidence
+      options:
+        - label: This request does not rely on a private or guessed protocol.
+          required: true
+        - label: I can provide a fixture that runs without live credentials.
+          required: false

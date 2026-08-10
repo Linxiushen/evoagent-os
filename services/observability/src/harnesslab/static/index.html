@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#171918" />
+    <title>HarnessLab</title>
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="stylesheet" href="./static/styles.css?v=3" />
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
+    <script src="./static/demo-data.js?v=1" defer></script>
+    <script src="./static/app.js?v=3" defer></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="./" aria-label="HarnessLab home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-copy"><strong>HarnessLab</strong><small>protocol workbench</small></span>
+      </a>
+
+      <nav class="primary-nav" aria-label="Workspace">
+        <button class="nav-item active" data-view="trace"><i data-lucide="git-branch"></i><span>Trace explorer</span></button>
+        <button class="nav-item" data-view="regression"><i data-lucide="diff"></i><span>Regression diff</span></button>
+        <button class="nav-item" data-view="conformance"><i data-lucide="badge-check"></i><span>Conformance</span></button>
+        <button class="nav-item" data-view="adapters"><i data-lucide="waypoints"></i><span>Adapters</span></button>
+        <button class="nav-item" data-view="tools"><i data-lucide="wrench"></i><span>Tool registry</span></button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="live-state"><span class="pulse"></span><span>Runtime online</span></div>
+        <a href="https://github.com/Linxiushen/harnesslab" target="_blank" rel="noreferrer">
+          <i data-lucide="github"></i><span>Repository</span>
+        </a>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="view-eyebrow">RUNS / LIVE TRACE</p>
+          <h1 id="view-title">Execution trace</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="version" id="version">v0.2.0</span>
+          <button class="icon-button" id="refresh" title="Refresh data" aria-label="Refresh data"><i data-lucide="refresh-cw"></i></button>
+        </div>
+      </header>
+
+      <section id="trace-view" class="view active">
+        <div class="metric-strip">
+          <div><span>Adapter</span><strong id="metric-adapter">demo</strong></div>
+          <div><span>Conformance</span><strong id="metric-checks">-</strong></div>
+          <div><span>Trace order</span><strong>strict</strong></div>
+          <div><span>Approval</span><strong>fail-closed</strong></div>
+        </div>
+
+        <form class="run-composer" id="run-form">
+          <div class="composer-field">
+            <i data-lucide="terminal"></i>
+            <input id="task-input" name="task" value="Review the checkout authorization change and report the highest-risk regression." aria-label="Agent task" />
+          </div>
+          <select id="adapter-select" aria-label="Adapter"></select>
+          <button class="primary-button" type="submit"><i data-lucide="play"></i><span>Run</span></button>
+        </form>
+
+        <div class="trace-layout">
+          <section class="run-rail" aria-label="Runs">
+            <div class="section-heading">
+              <div><p>RUN HISTORY</p><h2>Recent runs</h2></div>
+              <span class="count" id="run-count">0</span>
+            </div>
+            <div id="run-list" class="run-list"></div>
+          </section>
+
+          <section class="trace-main" aria-label="Selected run trace">
+            <div class="trace-header">
+              <div>
+                <div class="run-id-line"><code id="selected-run-id">-</code><button class="copy-button" id="copy-id" title="Copy run ID" aria-label="Copy run ID"><i data-lucide="copy"></i></button></div>
+                <h2 id="selected-task">Select a run</h2>
+              </div>
+              <div class="trace-header-actions">
+                <button class="icon-button" id="export-trace" title="Export Trace Contract" aria-label="Export Trace Contract"><i data-lucide="download"></i></button>
+                <span id="selected-status" class="status">idle</span>
+              </div>
+            </div>
+            <div class="trace-controls">
+              <div class="segmented" role="group" aria-label="Event filter">
+                <button class="active" data-filter="all">All</button>
+                <button data-filter="model">Model</button>
+                <button data-filter="tool">Tools</button>
+              </div>
+              <div class="trace-summary"><span id="event-count">0 events</span><span id="run-duration">0 ms</span></div>
+            </div>
+            <div class="timeline" id="timeline"></div>
+          </section>
+
+          <aside class="inspector" aria-label="Run inspector">
+            <div class="section-heading"><div><p>INSPECTOR</p><h2>Run output</h2></div></div>
+            <dl class="run-facts" id="run-facts"></dl>
+            <div class="answer-block">
+              <p>FINAL ANSWER</p>
+              <div id="run-answer">No completed output.</div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="regression-view" class="view">
+        <div class="compare-toolbar">
+          <label>
+            <span>BASELINE</span>
+            <select id="baseline-run" aria-label="Baseline run"></select>
+          </label>
+          <i data-lucide="arrow-right"></i>
+          <label>
+            <span>CANDIDATE</span>
+            <select id="candidate-run" aria-label="Candidate run"></select>
+          </label>
+          <button class="primary-button" id="compare-runs"><i data-lucide="diff"></i><span>Compare</span></button>
+        </div>
+
+        <div class="compare-summary">
+          <div class="compare-score"><strong id="compare-score">-</strong><span>protocol score</span></div>
+          <div><span>Verdict</span><strong id="compare-verdict">Select two runs</strong></div>
+          <div><span>Trace Contract</span><strong id="contract-version">harnesslab.trace/v1</strong></div>
+          <div><span>Content</span><strong id="content-verdict">-</strong></div>
+        </div>
+
+        <div class="fingerprint-grid">
+          <div><span>BASELINE FINGERPRINT</span><code id="baseline-fingerprint">-</code></div>
+          <div><span>CANDIDATE FINGERPRINT</span><code id="candidate-fingerprint">-</code></div>
+        </div>
+
+        <div class="data-table-wrap">
+          <table class="data-table diff-table">
+            <thead><tr><th>Area</th><th>Severity</th><th>Change</th><th>Expected / Actual</th></tr></thead>
+            <tbody id="diff-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="conformance-view" class="view">
+        <div class="view-toolbar">
+          <div class="score-lockup"><strong id="score-value">-</strong><span>checks passed</span></div>
+          <button class="primary-button" id="run-checks"><i data-lucide="flask-conical"></i><span>Run matrix</span></button>
+        </div>
+        <div class="matrix-visual" id="matrix-visual" aria-label="Conformance result visualization"></div>
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Check</th><th>Status</th><th>Evidence</th></tr></thead>
+            <tbody id="check-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="adapters-view" class="view">
+        <div class="adapter-grid" id="adapter-grid"></div>
+      </section>
+
+      <section id="tools-view" class="view">
+        <div class="data-table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Tool</th><th>Source</th><th>Policy</th><th>Required input</th></tr></thead>
+            <tbody id="tool-table"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
