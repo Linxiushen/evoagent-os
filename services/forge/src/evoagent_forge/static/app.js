@@ -1,0 +1,5 @@
+const list=document.querySelector('#releases'),count=document.querySelector('#count'),query=document.querySelector('#query');
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function load(){const r=await fetch('/v1/releases?q='+encodeURIComponent(query.value));const data=await r.json();count.textContent=data.length;list.innerHTML=data.length?data.map(x=>`<article class="card"><div class="top"><h3>${esc(x.name)}</h3><span class="version">v${esc(x.version)}</span></div><p>${esc(x.description)}</p><div class="digest">sha256:${esc(x.digest.slice(0,18))}...</div><p class="signed"><i data-lucide="${x.signature?'badge-check':'circle-alert'}"></i>${x.signature?'Signed artifact':'Unsigned artifact'}</p></article>`).join(''):document.querySelector('#empty').innerHTML;lucide.createIcons()}
+query.addEventListener('input',()=>{clearTimeout(window.t);window.t=setTimeout(load,180)});fetch('/health').then(r=>r.json()).then(()=>document.querySelector('#health').textContent='registry online');load();
+

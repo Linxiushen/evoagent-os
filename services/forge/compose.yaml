@@ -1,0 +1,9 @@
+services:
+  registry:
+    build: .
+    ports: ["8822:8822"]
+    volumes: ["forge-registry:/registry"]
+    restart: unless-stopped
+volumes:
+  forge-registry:
+
