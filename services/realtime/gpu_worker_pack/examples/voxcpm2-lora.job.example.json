@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "run_id": "authorized-subject-voice-lora-v1",
+  "mode": "voxcpm2_lora",
+  "authorization": {
+    "record_id": "auth-record-001",
+    "record_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "status": "approved",
+    "subject_verified": true,
+    "authority_verified": true,
+    "approved_at": "2026-08-01T00:00:00Z",
+    "valid_until": "2030-08-01T00:00:00Z",
+    "scopes": ["voice_clone"],
+    "allowed_processors": ["openbmb/VoxCPM2"]
+  },
+  "models": [
+    {
+      "id": "openbmb/VoxCPM2",
+      "revision": "bffb3df5a29440629464e5e839f4d214c8714c3d",
+      "path": "/models/VoxCPM2",
+      "snapshot": {
+        "path": "/private/echoweave/locks/VoxCPM2.snapshot.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ],
+  "source_repositories": [
+    {
+      "id": "OpenBMB/VoxCPM",
+      "revision": "616d3d3e630a9c96c2853250eef91b0f39dcd5fa",
+      "path": "/opt/VoxCPM"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "authorization-record",
+      "role": "authorization_record",
+      "path": "/private/echoweave/job/authorization.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "application/json"
+    },
+    {
+      "id": "voice-reference",
+      "role": "voice_reference_wav",
+      "path": "/private/echoweave/job/voice-reference.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "voice-reference-transcript",
+      "role": "voice_reference_transcript",
+      "path": "/private/echoweave/job/voice-reference.txt",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "text/plain"
+    },
+    {
+      "id": "synthesis-text",
+      "role": "synthesis_text",
+      "path": "/private/echoweave/job/synthesis-text.txt",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "text/plain"
+    },
+    {
+      "id": "train-manifest",
+      "role": "voxcpm_train_manifest",
+      "path": "/private/echoweave/job/train.jsonl",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "application/x-ndjson"
+    },
+    {
+      "id": "dataset-manifest",
+      "role": "voxcpm_dataset_manifest",
+      "path": "/private/echoweave/job/dataset-manifest.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "application/json"
+    },
+    {
+      "id": "train-config",
+      "role": "voxcpm_train_config",
+      "path": "/private/echoweave/job/voxcpm2-lora.yaml",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "application/yaml"
+    },
+    {
+      "id": "train-audio-001",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/001.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "train-audio-002",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/002.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "train-audio-003",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/003.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "train-audio-004",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/004.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "train-audio-005",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/005.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "train-audio-006",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/006.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "train-audio-007",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/007.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "train-audio-008",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/008.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "train-audio-009",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/009.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    },
+    {
+      "id": "train-audio-010",
+      "role": "voxcpm_train_audio",
+      "path": "/private/echoweave/job/train/010.wav",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "media_type": "audio/wav"
+    }
+  ],
+  "execution": {
+    "gpu_index": 0,
+    "seed": 42,
+    "output_dir": "/private/echoweave/job/outputs/voice-lora",
+    "output_filename": "voice-lora.wav",
+    "checkpoint_dir": "/private/echoweave/job/checkpoints/voxcpm2-lora"
+  }
+}

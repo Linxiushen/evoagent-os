@@ -1,0 +1,9 @@
+*
+!.gitignore
+!README.md
+!configs/
+!configs/**
+!constraints/
+!constraints/**
+!examples/
+!examples/**

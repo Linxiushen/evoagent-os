@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/Linxiushen/echoweave-rtc/security/advisories/new
+    about: Report vulnerabilities or accidental sensitive-data exposure privately.
+  - name: Security and consent model
+    url: https://github.com/Linxiushen/echoweave-rtc/blob/main/docs/SECURITY.md
+    about: Read the runtime security boundaries before proposing persona workflows.

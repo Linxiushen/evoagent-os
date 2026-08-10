@@ -1,0 +1,88 @@
+[build-system]
+# Exact build requirements make isolated PEP 517 wheel builds repeatable. Update
+# these deliberately together with the release constraints and artifact checks.
+requires = ["setuptools==83.0.0", "wheel==0.47.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "echoweave-rtc"
+version = "0.2.0"
+description = "Consent-first realtime voice and digital-avatar agent orchestration."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "LICENSES/*"]
+authors = [{name = "Linxiushen"}]
+keywords = [
+  "realtime-ai",
+  "voice-agent",
+  "digital-avatar",
+  "websocket",
+  "consent",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: FastAPI",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+  "fastapi>=0.115,<1",
+  "httpx>=0.28,<1",
+  "python-dotenv>=1.1,<2",
+  "python-multipart>=0.0.20,<1",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<10",
+  "pytest-asyncio>=0.25,<2",
+  "ruff>=0.12,<1",
+]
+qwen = [
+  "numpy>=1.26,<3",
+  "qwen-asr>=0.0.6,<0.1",
+  "soundfile>=0.13,<1",
+  "torch>=2.5",
+]
+voxcpm = [
+  "numpy>=1.26,<3",
+  "soundfile>=0.13,<1",
+  "torch>=2.5",
+  "voxcpm>=2.0.3,<3",
+]
+silero-v5 = [
+  "numpy>=1.26,<3",
+  "onnxruntime>=1.20,<2",
+]
+
+[project.urls]
+Homepage = "https://github.com/Linxiushen/echoweave-rtc"
+Repository = "https://github.com/Linxiushen/echoweave-rtc.git"
+Issues = "https://github.com/Linxiushen/echoweave-rtc/issues"
+Documentation = "https://github.com/Linxiushen/echoweave-rtc/tree/main/docs"
+Security = "https://github.com/Linxiushen/echoweave-rtc/security/policy"
+
+[project.scripts]
+echoweave = "echoweave.cli:main"
+echoweave-consent = "echoweave.persona:main"
+echoweave-gpu-worker = "echoweave.gpu_worker:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+echoweave = ["web/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

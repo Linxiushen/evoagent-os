@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "run_id": "replace-with-the-job-run-id",
+  "evaluators": [
+    {
+      "name": "replace-with-pinned-evaluator-name",
+      "version": "replace-with-exact-version-or-revision",
+      "path": "/private/echoweave/evaluators/voice-evaluator",
+      "artifact_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "metrics": {
+    "speaker_embedding_cosine": 0.9,
+    "asr_character_error_rate": 0.05,
+    "rtf_p95": 0.5,
+    "clipping_ratio": 0.0,
+    "sample_rate_hz": 48000,
+    "human_review_pass": true,
+    "ai_disclosure_present": true
+  }
+}

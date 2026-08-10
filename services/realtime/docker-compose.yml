@@ -1,0 +1,43 @@
+services:
+  gateway:
+    build: .
+    ports:
+      # Safe default: publish only on the host loopback. Put an HTTPS/WSS
+      # reverse proxy in front instead of exposing the clear-text worker port.
+      - "127.0.0.1:8765:8765"
+    env_file:
+      - .env
+    environment:
+      # The process listens on the container private address while the host
+      # publication above remains loopback-only. Remove this exception and use
+      # TLS/trusted-proxy settings before changing the published address.
+      ECHOWEAVE_ALLOW_INSECURE_PRIVATE_TRANSPORT: "true"
+    volumes:
+      - ./personas:/app/personas:ro
+      - model-cache:/app/runtime
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/ready', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+# Qwen3-ASR, VoxCPM2 and SoulX deliberately run as separate GPU workers.
+# Their CUDA / Python dependency stacks conflict, so deploy them following
+# docs/DEPLOYMENT.md and point the *_BASE_URL variables at those workers.
+
+volumes:
+  model-cache:

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="EchoWeave-RTC 本地、自托管 API 参考" />
+    <meta name="theme-color" content="#070b11" />
+    <title>EchoWeave RTC · API Reference</title>
+    <link rel="stylesheet" href="/styles.css?v=0.2.0" />
+  </head>
+  <body class="docs-page">
+    <a class="skip-link" href="#apiReference">跳到 API 参考</a>
+    <div class="ambient-light ambient-light-one" aria-hidden="true"></div>
+    <div class="noise" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="返回 EchoWeave 实时对话控制台">
+        <span class="brand-mark" aria-hidden="true"><span>EW</span></span>
+        <span class="brand-copy">
+          <strong>EchoWeave</strong>
+          <small>SELF-HOSTED API REFERENCE</small>
+        </span>
+      </a>
+      <nav class="top-actions" aria-label="API 导航">
+        <span class="safety-pill"><i aria-hidden="true"></i> CONSENT-FIRST</span>
+        <a href="/openapi.json" class="ghost-link">
+          <span>OPENAPI JSON</span><i aria-hidden="true">↗</i>
+        </a>
+        <a href="/" class="ghost-link"><span>控制台</span><i aria-hidden="true">←</i></a>
+      </nav>
+    </header>
+
+    <main id="apiReference" class="docs-shell">
+      <header class="docs-hero">
+        <p class="eyebrow"><span></span> PROTOCOL · VERSION 1</p>
+        <h1>实时会话 API，<em>边界清晰且默认安全。</em></h1>
+        <p>
+          HTTP 负责探针、模型来源和受保护指标；WebSocket 负责能力协商、控制事件与二进制媒体。
+          所有真人 Persona 必须先通过签名授权清单，客户端还必须明确确认 AI 身份披露。
+        </p>
+        <div class="docs-badges" aria-label="协议摘要">
+          <span>JSON CONTROL</span><span>PCM16 MEDIA</span><span>BOUNDED QUEUES</span><span>INTERRUPTIBLE</span>
+        </div>
+      </header>
+
+      <div class="docs-layout">
+        <nav class="docs-toc" aria-label="本页目录">
+          <strong>CONTENTS</strong>
+          <a href="#http">HTTP 端点</a>
+          <a href="#handshake">会话握手</a>
+          <a href="#controls">控制消息</a>
+          <a href="#events">服务端事件</a>
+          <a href="#media">媒体帧</a>
+          <a href="#security">安全约束</a>
+        </nav>
+
+        <article class="docs-content">
+          <section id="http" class="docs-section">
+            <p class="section-kicker">HTTP SURFACE</p>
+            <h2>HTTP 端点</h2>
+            <div class="endpoint-table" role="list" aria-label="HTTP API 端点">
+              <div role="listitem"><code>GET</code><strong>/api/health</strong><span>进程存活探针</span></div>
+              <div role="listitem"><code>GET</code><strong>/api/ready</strong><span>Runtime 与依赖就绪探针</span></div>
+              <div role="listitem"><code>GET</code><strong>/api/metrics</strong><span>本地或 Bearer 运维身份可读</span></div>
+              <div role="listitem"><code>GET</code><strong>/api/model-sources</strong><span>已集成模型的权威来源</span></div>
+              <div role="listitem"><code>GET</code><strong>/openapi.json</strong><span>机器可读 OpenAPI 规范</span></div>
+              <div role="listitem"><code>WS</code><strong>/ws</strong><span>实时会话与媒体通道</span></div>
+            </div>
+          </section>
+
+          <section id="handshake" class="docs-section">
+            <p class="section-kicker">01 · HANDSHAKE</p>
+            <h2>先协商，再启动</h2>
+            <p>连接后服务端发送 <code>session.hello</code>。客户端以 <code>start</code> 声明协议版本、能力、Persona 和披露确认。</p>
+            <pre><code>{
+  "type": "start",
+  "persona_id": "demo",
+  "access_token": "&lt;server-issued token&gt;",
+  "ai_disclosure_ack": true,
+  "protocol": {
+    "version": 1,
+    "capabilities": [
+      "input.text",
+      "input.audio_pcm16",
+      "output.text_stream",
+      "control.cancel",
+      "control.ping"
+    ]
+  }
+}</code></pre>
+            <p>成功路径为 <code>session.negotiated</code> → <code>session.ready</code>；失败返回结构化 <code>error</code>，包含关联 ID、类别、是否可重试与是否致命。</p>
+          </section>
+
+          <section id="controls" class="docs-section">
+            <p class="section-kicker">02 · CONTROL</p>
+            <h2>控制消息</h2>
+            <div class="docs-grid">
+              <div><code>text</code><p>提交单轮文字。受最大字符数和控制速率预算保护。</p></div>
+              <div><code>cancel</code><p>推进 generation epoch，立即隔离迟到文本、音频和视频。</p></div>
+              <div><code>ping</code><p>携带 <code>client_time_ms</code>；服务端以 <code>session.pong</code> 回显。</p></div>
+              <div><code>stop</code><p>显式结束会话并触发模型、媒体队列与连接资源释放。</p></div>
+            </div>
+          </section>
+
+          <section id="events" class="docs-section">
+            <p class="section-kicker">03 · EVENTS</p>
+            <h2>结构化事件</h2>
+            <p>每个 JSON 事件都带 <code>session_id</code>、<code>event_id</code>、单调递增 <code>sequence</code> 与 <code>server_time_ms</code>。</p>
+            <div class="event-chips" aria-label="主要事件">
+              <code>session.state</code><code>asr.final</code><code>assistant.delta</code>
+              <code>assistant.final</code><code>tts.format</code><code>avatar.segment</code>
+              <code>turn.metrics</code><code>turn.cancelled</code><code>degraded</code><code>error</code>
+            </div>
+          </section>
+
+          <section id="media" class="docs-section">
+            <p class="section-kicker">04 · BINARY MEDIA</p>
+            <h2>12 字节小端媒体头</h2>
+            <div class="media-header" role="list" aria-label="媒体帧头结构">
+              <span role="listitem"><b>0..1</b><code>EW</code><small>magic</small></span>
+              <span role="listitem"><b>2</b><code>1</code><small>version</small></span>
+              <span role="listitem"><b>3</b><code>kind</code><small>1 mic · 2 TTS · 3 video</small></span>
+              <span role="listitem"><b>4..7</b><code>turn_id</code><small>uint32</small></span>
+              <span role="listitem"><b>8..11</b><code>pts_ms</code><small>uint32</small></span>
+            </div>
+            <p>麦克风输入必须是 16 kHz、单声道、PCM signed 16-bit little-endian，单帧 10–250 ms。所有包、队列和输出阶段均有硬上限。</p>
+          </section>
+
+          <section id="security" class="docs-section docs-security">
+            <p class="section-kicker">05 · SECURITY</p>
+            <h2>不可绕过的产品边界</h2>
+            <ul>
+              <li>真人声音、面部和行为蒸馏仅允许加载本人明确授权且未撤销的 Persona。</li>
+              <li>AI 身份披露必须由客户端确认，并在合成视频中持续显示。</li>
+              <li>访问令牌不写入查询参数、日志或持久化存储；URL fragment 仅用于一次性注入并立即清除。</li>
+              <li>公网部署必须由可信反向代理提供 HTTPS/WSS；模型 Worker 应位于私有网络。</li>
+            </ul>
+          </section>
+        </article>
+      </div>
+    </main>
+  </body>
+</html>

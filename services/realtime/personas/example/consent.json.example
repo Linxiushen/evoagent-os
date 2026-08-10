@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "manifest_revision": 1,
+  "persona_id": "authorized-example",
+  "consent_id": "consent-record-from-your-system",
+  "subject_display_name": "Authorized Example",
+  "profile_class": "verified_human",
+  "subject_verified": true,
+  "verification_record_id": "identity-and-liveness-record-id",
+  "asset_rights_record_id": "voice-face-and-material-rights-record-id",
+  "consent_granted": true,
+  "consent_withdrawn": false,
+  "consent_scope": [
+    "interactive_conversation",
+    "persona_profile",
+    "voice_clone",
+    "avatar_animation",
+    "third_party_model_processing"
+  ],
+  "issued_at": "2026-07-31T00:00:00Z",
+  "valid_until": "2027-07-31T00:00:00Z",
+  "nuwa_skill": "SKILL.md",
+  "reference_image": "assets/face.png",
+  "reference_voice": "assets/voice.wav",
+  "reference_voice_transcript": "The exact transcript of the consented voice sample.",
+  "reference_hashes": {
+    "SKILL.md": "replace-with-sha256",
+    "assets/face.png": "replace-with-sha256",
+    "assets/voice.wav": "replace-with-sha256"
+  },
+  "hmac_sha256": ""
+}

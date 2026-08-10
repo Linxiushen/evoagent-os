@@ -1,0 +1,5 @@
+# Apply after the pinned SoulX repository requirements have been reviewed.
+# PyTorch/torchvision must come from the official CUDA 12.8 wheel index.
+torch==2.7.1
+torchvision==0.22.1
+flash-attn==2.8.0.post2

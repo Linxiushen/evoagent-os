@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="EchoWeave-RTC — consent-first realtime digital-human conversation console"
+    />
+    <meta name="theme-color" content="#070b11" />
+    <title>EchoWeave RTC · 实时数字人控制台</title>
+    <link rel="stylesheet" href="/styles.css?v=0.2.0" />
+  </head>
+  <body>
+    <a class="skip-link" href="#realtimeWorkspace">跳到实时对话控制台</a>
+    <div class="ambient-light ambient-light-one" aria-hidden="true"></div>
+    <div class="ambient-light ambient-light-two" aria-hidden="true"></div>
+    <div class="noise" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="EchoWeave 实时对话控制台首页">
+        <span class="brand-mark" aria-hidden="true">
+          <span>EW</span>
+        </span>
+        <span class="brand-copy">
+          <strong>EchoWeave</strong>
+          <small>REALTIME AGENT FABRIC</small>
+        </span>
+      </a>
+
+      <nav class="top-actions" aria-label="产品状态与帮助">
+        <span class="safety-pill">
+          <i aria-hidden="true"></i>
+          CONSENT-FIRST
+        </span>
+        <span class="ai-status-pill">
+          <b aria-hidden="true">AI</b>
+          合成身份已披露
+        </span>
+        <a href="/docs" class="ghost-link" title="打开 API 文档">
+          <span>API DOCS</span>
+          <i aria-hidden="true">↗</i>
+        </a>
+      </nav>
+    </header>
+
+    <main class="shell">
+      <section class="hero-copy" aria-labelledby="hero-title">
+        <div class="hero-main">
+          <p class="eyebrow"><span></span> AUTHORIZED DIGITAL PRESENCE</p>
+          <h1 id="hero-title">
+            让声音、思维与表情
+            <em>在同一条实时链路中流动。</em>
+          </h1>
+          <p class="intro">
+            EchoWeave 编排端点检测、语音识别、智能推理、声音合成与流式头像，
+            为低延迟、可打断、可观测的数字人对话而设计。
+          </p>
+          <a class="hero-cta" href="#session-control-title">
+            进入实时控制台 <span aria-hidden="true">↓</span>
+          </a>
+        </div>
+
+        <dl class="hero-facts" aria-label="系统设计特性">
+          <div>
+            <dt>TURN MODEL</dt>
+            <dd>全双工 · 可打断</dd>
+          </div>
+          <div>
+            <dt>MEDIA PATH</dt>
+            <dd>流式音频 · 帧同步</dd>
+          </div>
+          <div>
+            <dt>IDENTITY</dt>
+            <dd>授权清单 · 永久披露</dd>
+          </div>
+        </dl>
+      </section>
+
+      <aside class="disclosure-banner" aria-label="AI 合成身份披露">
+        <span class="disclosure-symbol" aria-hidden="true">AI</span>
+        <div>
+          <strong>你将与 AI 生成的数字分身对话</strong>
+          <p>
+            当前默认角色 Echo 为虚构角色。真人音色与形象必须经过授权、签名校验和素材哈希登记。
+          </p>
+        </div>
+        <span class="disclosure-lock"><i aria-hidden="true"></i> 永久披露</span>
+      </aside>
+
+      <section id="realtimeWorkspace" class="workspace" aria-label="实时数字人工作区">
+        <article class="stage-card">
+          <header class="stage-toolbar">
+            <div class="connection-status" role="status" aria-live="polite">
+              <span id="connectionDot" class="connection-dot" aria-hidden="true"></span>
+              <span class="status-copy">
+                <small>SESSION STATE</small>
+                <strong id="stateLabel">未连接</strong>
+              </span>
+            </div>
+            <div class="toolbar-divider" aria-hidden="true"></div>
+            <span id="latencyLabel" class="metric">LOCAL DEMO</span>
+            <span id="transportSecurityLabel" class="secure-path" data-security="local">
+              <i aria-hidden="true"></i> <span id="transportSecurityText">LOCAL MEDIA PATH</span>
+            </span>
+          </header>
+
+          <div class="stage" id="stage">
+            <div class="grid-lines" aria-hidden="true"></div>
+            <div class="stage-vignette" aria-hidden="true"></div>
+            <div class="scanner" aria-hidden="true"></div>
+
+            <div class="stage-mode" aria-hidden="true">
+              <span>LIVE SYNTHESIS</span>
+              <small>REALTIME · INTERRUPTIBLE</small>
+            </div>
+
+            <div class="stage-telemetry" aria-label="实时网络状态">
+              <span class="telemetry-icon" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span>
+                <small>NETWORK</small>
+                <strong id="networkQuality">等待连接</strong>
+              </span>
+              <output id="networkRtt">-- ms</output>
+            </div>
+
+            <video
+              id="avatarVideo"
+              muted
+              playsinline
+              aria-label="AI 合成数字人视频输出"
+            ></video>
+            <div
+              id="syntheticAvatar"
+              class="avatar-shell"
+              role="img"
+              aria-label="AI 合成角色 Echo 的抽象头像"
+            >
+              <div class="halo halo-one"></div>
+              <div class="halo halo-two"></div>
+              <div class="halo halo-three"></div>
+              <div class="face-shadow" aria-hidden="true"></div>
+              <div class="face">
+                <span class="face-highlight" aria-hidden="true"></span>
+                <span class="brow brow-left"></span>
+                <span class="brow brow-right"></span>
+                <span class="eye eye-left"></span>
+                <span class="eye eye-right"></span>
+                <span id="mouth" class="mouth"></span>
+              </div>
+              <div class="voice-rings" aria-hidden="true">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+            </div>
+
+            <div class="identity">
+              <span class="identity-index">PERSONA / 01</span>
+              <strong id="identityName">ECHO</strong>
+              <span id="identityType">虚构演示角色</span>
+            </div>
+            <div class="watermark" aria-label="永久 AI 合成媒体标识">
+              <span><i aria-hidden="true">AI</i> AI 数字分身</span>
+              <small>SYNTHETIC MEDIA · ECHOWEAVE</small>
+            </div>
+          </div>
+
+          <section class="controls" aria-labelledby="session-control-title">
+            <div class="control-heading">
+              <div>
+                <p class="section-kicker">SESSION CONTROL</p>
+                <h2 id="session-control-title">连接与对话</h2>
+              </div>
+              <span class="control-hint">音频只在当前会话中实时处理</span>
+            </div>
+
+            <div class="session-config">
+              <label for="personaInput">
+                <span>PERSONA ID</span>
+                <input
+                  id="personaInput"
+                  type="text"
+                  value="demo"
+                  maxlength="64"
+                  pattern="[a-z0-9_-]+"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-describedby="personaHelp"
+                />
+                <small id="personaHelp">使用服务端已授权的身份</small>
+              </label>
+              <label for="accessTokenInput">
+                <span>SESSION / ACCESS TOKEN</span>
+                <input
+                  id="accessTokenInput"
+                  type="password"
+                  maxlength="4096"
+                  placeholder="本地演示可留空"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-describedby="tokenHelp"
+                />
+                <small id="tokenHelp">短期令牌只保存在当前页面内存中</small>
+              </label>
+            </div>
+
+            <details class="identity-intake">
+              <summary>
+                <span class="intake-symbol" aria-hidden="true">ID</span>
+                <span>
+                  <strong>真人身份如何安全录入？</strong>
+                  <small>录入与实时会话分离，当前页面不接收陌生人的脸或声音</small>
+                </span>
+                <i aria-hidden="true">＋</i>
+              </summary>
+              <div class="intake-content">
+                <p>
+                  真人数字分身需要权利人明确授权，并在受控服务端登记最小必要信息；
+                  浏览器只选择已经审核、签名和允许使用的 PERSONA ID。
+                </p>
+                <ul aria-label="真人身份注册所需资料">
+                  <li><b>01</b><span>经人工复核的 persona 资料或 Nuwa SKILL.md</span></li>
+                  <li><b>02</b><span>用途、有效期、第三方处理与可撤回授权记录</span></li>
+                  <li><b>03</b><span>授权面部参考、干净声音样本及准确逐字稿</span></li>
+                  <li><b>04</b><span>素材 SHA-256、授权 revision 与服务端签名清单</span></li>
+                </ul>
+                <a
+                  href="https://github.com/Linxiushen/echoweave-rtc/blob/main/personas/README.md"
+                  target="_blank"
+                  rel="noreferrer"
+                >查看服务端注册流程 <span aria-hidden="true">↗</span></a>
+              </div>
+            </details>
+
+            <label class="acknowledgement" for="disclosureAck">
+              <input id="disclosureAck" type="checkbox" />
+              <span class="checkmark" aria-hidden="true"></span>
+              <span>
+                <strong>我已知悉对方是 AI 数字分身，不是真人</strong>
+                <small>该确认仅用于明确知情，不代表放弃任何隐私权利。</small>
+              </span>
+            </label>
+
+            <div class="button-row">
+              <button id="startButton" class="primary-button" type="button">
+                <span class="mic-icon" aria-hidden="true"></span>
+                <span>开始实时对话</span>
+              </button>
+              <button
+                id="cancelButton"
+                class="icon-button"
+                type="button"
+                title="打断当前回答"
+                aria-label="立即打断当前回答"
+              >
+                <span class="stop-icon" aria-hidden="true"></span>
+              </button>
+              <button
+                id="endButton"
+                class="icon-button end-button"
+                type="button"
+                title="结束并释放当前会话"
+                aria-label="结束并释放当前会话"
+                disabled
+              >
+                <span class="end-icon" aria-hidden="true"></span>
+              </button>
+            </div>
+
+            <div class="text-turn">
+              <label class="sr-only" for="textInput">输入文字消息</label>
+              <input
+                id="textInput"
+                type="text"
+                maxlength="1000"
+                placeholder="也可以先输入文字测试整条实时链路…"
+                autocomplete="off"
+              />
+              <span class="text-shortcut" aria-hidden="true">ENTER</span>
+              <button id="sendButton" type="button">发送 <i aria-hidden="true">↗</i></button>
+            </div>
+          </section>
+
+          <dl class="latency-grid" aria-label="当前会话性能指标">
+            <div>
+              <dt>TURN LATENCY</dt>
+              <dd id="turnLatency">-- ms</dd>
+              <small>端到端</small>
+            </div>
+            <div>
+              <dt>FIRST TOKEN</dt>
+              <dd id="firstTokenLatency">-- ms</dd>
+              <small>首字响应</small>
+            </div>
+            <div>
+              <dt>SEQUENCE</dt>
+              <dd id="sessionSequence">--</dd>
+              <small>事件序列</small>
+            </div>
+          </dl>
+        </article>
+
+        <div class="right-rail">
+          <aside class="conversation-card" aria-labelledby="transcript-title">
+            <header class="panel-heading">
+              <div>
+                <p class="eyebrow"><span></span> LIVE TRANSCRIPT</p>
+                <h2 id="transcript-title">实时会话</h2>
+              </div>
+              <button id="clearButton" class="clear-button" type="button">
+                <span aria-hidden="true">×</span> 清空记录
+              </button>
+            </header>
+            <div
+              id="transcript"
+              class="transcript"
+              role="log"
+              aria-live="off"
+              aria-label="实时会话记录"
+            >
+              <div class="system-note">
+                <span>系统</span>
+                <p>勾选 AI 身份提示后开始。麦克风不可用时仍可使用文字输入。</p>
+              </div>
+            </div>
+            <p id="transcriptAnnouncements" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+            <footer class="transcript-footer">
+              <span id="transcriptStatusIndicator" data-status="offline">
+                <i aria-hidden="true"></i> <span id="transcriptSessionState">等待会话</span>
+              </span>
+              <small>内容由 AI 实时生成，请核验重要信息</small>
+            </footer>
+          </aside>
+
+          <aside class="operations-card" aria-labelledby="operations-title">
+            <header class="operations-heading">
+              <div>
+                <p class="section-kicker">SESSION INTELLIGENCE</p>
+                <h2 id="operations-title">链路可观测性</h2>
+              </div>
+              <span id="operationsLiveState" class="live-indicator" data-status="offline">
+                <i aria-hidden="true"></i> <span id="operationsLiveLabel">STANDBY</span>
+              </span>
+            </header>
+
+            <div id="pipelineStages" class="pipeline-strip" aria-label="当前模型流水线">
+              <div data-stage="vad"><span>01</span><strong>VAD</strong><small>Silero v5</small></div>
+              <div data-stage="asr"><span>02</span><strong>ASR</strong><small>Qwen3</small></div>
+              <div data-stage="llm"><span>03</span><strong>LLM</strong><small>DeepSeek</small></div>
+              <div data-stage="tts"><span>04</span><strong>TTS</strong><small>VoxCPM2</small></div>
+              <div data-stage="avatar"><span>05</span><strong>FACE</strong><small>SoulX</small></div>
+            </div>
+
+            <section class="capability-panel" aria-labelledby="capability-title">
+              <div class="subsection-heading">
+                <h3 id="capability-title">协商能力</h3>
+                <span>CAPABILITIES</span>
+              </div>
+              <div id="capabilityList" class="capability-list">
+                <span data-state="pending"><i></i>等待握手</span>
+              </div>
+            </section>
+
+            <section class="activity-panel" aria-labelledby="activity-title">
+              <div class="subsection-heading">
+                <h3 id="activity-title">活动记录</h3>
+                <span>EVENT STREAM</span>
+              </div>
+              <ol id="activityLog" class="activity-log" role="log" aria-live="off" aria-relevant="additions">
+                <li><time datetime="">--:--</time><span>等待会话启动</span></li>
+              </ol>
+            </section>
+
+            <button id="recoveryAction" class="recovery-action" type="button" disabled>
+              <span class="recovery-icon" aria-hidden="true">↻</span>
+              <span>
+                <strong data-recovery-label>当前无需恢复</strong>
+                <small data-recovery-detail>连接异常时可在此安全重试</small>
+              </span>
+              <i aria-hidden="true">→</i>
+            </button>
+          </aside>
+        </div>
+      </section>
+
+      <section class="assurance-section" aria-labelledby="assurance-title">
+        <header>
+          <p class="eyebrow"><span></span> TRUST BY DESIGN</p>
+          <h2 id="assurance-title">从第一帧开始，可信且可控。</h2>
+        </header>
+        <div class="assurance-grid">
+          <article>
+            <span>01</span>
+            <div class="assurance-icon" aria-hidden="true">↯</div>
+            <h3>随时可打断</h3>
+            <p>新语音触发 generation epoch，旧回答、音频与迟到视频帧立即失效。</p>
+          </article>
+          <article>
+            <span>02</span>
+            <div class="assurance-icon" aria-hidden="true">⌁</div>
+            <h3>身份可审计</h3>
+            <p>真人 persona 仅从带签名、有效期与素材哈希的服务端授权清单加载。</p>
+          </article>
+          <article>
+            <span>03</span>
+            <div class="assurance-icon" aria-hidden="true">◇</div>
+            <h3>服务可降级</h3>
+            <p>头像不可用时回落到带永久标识的合成形象，核心语音链路继续工作。</p>
+          </article>
+        </div>
+      </section>
+
+      <footer class="site-footer">
+        <span>ECHOWEAVE RTC · CONSENT-FIRST AI</span>
+        <span>音视频默认不在服务端持久化</span>
+      </footer>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="assertive"></div>
+    <script src="/app.js?v=0.2.0" defer></script>
+  </body>
+</html>
