@@ -1,0 +1,31 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONPATH=/app/packages/contracts/src:/app/services/runtime/src:/app/services/fleet/src:/app/services/forge/src:/app/services/observability/src:/app/services/realtime/src
+
+WORKDIR /app
+
+COPY pyproject.toml README.md LICENSE ./
+COPY apps ./apps
+COPY packages ./packages
+COPY services/runtime/src ./services/runtime/src
+COPY services/fleet/src ./services/fleet/src
+COPY services/forge/src ./services/forge/src
+COPY services/observability/src ./services/observability/src
+COPY services/realtime/src ./services/realtime/src
+
+RUN python -m pip install --no-cache-dir . \
+    && addgroup --system --gid 10001 evoagent \
+    && adduser --system --uid 10001 --ingroup evoagent --home /nonexistent --no-create-home evoagent \
+    && mkdir -p /state \
+    && chown evoagent:evoagent /state
+
+USER evoagent
+EXPOSE 8800
+
+HEALTHCHECK --interval=20s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8800/health', timeout=2)"]
+
+CMD ["evoagent-os", "--host", "0.0.0.0", "--port", "8800"]

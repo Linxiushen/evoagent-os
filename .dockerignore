@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+.evoagent-os
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.pyc
+**/dist
+**/build
+services/realtime/gpu_worker_pack
+services/realtime/docs/research
+tests

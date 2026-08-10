@@ -1,0 +1,22 @@
+@baseUrl = http://127.0.0.1:8800
+@token = CHANGE_ME_control_plane_random_token
+
+### Launch the deterministic offline market-research demo.
+POST {{baseUrl}}/api/v1/demo/launch
+Authorization: Bearer {{token}}
+Idempotency-Key: market-research-demo-v1
+
+### Inspect the pending publish approval.
+GET {{baseUrl}}/api/v1/approvals
+Authorization: Bearer {{token}}
+
+### Replace the path value with approval_id from the launch response.
+POST {{baseUrl}}/api/v1/approvals/REPLACE_WITH_APPROVAL_ID
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "approved": true,
+  "actor": "demo-operator",
+  "reason": "Fixture disclosures and evidence boundary reviewed"
+}

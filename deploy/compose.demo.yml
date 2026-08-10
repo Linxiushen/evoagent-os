@@ -1,0 +1,103 @@
+name: evoagent-os
+
+services:
+  control-plane:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.control-plane
+    environment:
+      EVOAGENT_OS_STATE_DIR: /state
+      EVOAGENT_OS_TOKEN: ${EVOAGENT_OS_TOKEN:?Set EVOAGENT_OS_TOKEN in deploy/.env}
+    ports:
+      - "127.0.0.1:8800:8800"
+    volumes:
+      - control-state:/state
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  harnesslab:
+    build:
+      context: ../services/observability
+    ports:
+      - "127.0.0.1:4318:4318"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  runtime:
+    profiles: [components]
+    build:
+      context: ../services/runtime
+    environment:
+      EVOAGENT_STATE_DIR: /state
+      EVOAGENT_WORKSPACE: /workspace
+      EVOAGENT_GATEWAY_TOKEN: ${EVOAGENT_GATEWAY_TOKEN:?Set EVOAGENT_GATEWAY_TOKEN in deploy/.env}
+    ports:
+      - "127.0.0.1:8811:8811"
+    volumes:
+      - runtime-state:/state
+      - runtime-workspace:/workspace
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  fleet:
+    profiles: [components]
+    build:
+      context: ../services/fleet
+    ports:
+      - "127.0.0.1:8833:8833"
+    volumes:
+      - fleet-state:/state
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  forge:
+    profiles: [components]
+    build:
+      context: ../services/forge
+    ports:
+      - "127.0.0.1:8822:8822"
+    volumes:
+      - forge-registry:/registry
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  realtime:
+    profiles: [realtime]
+    build:
+      context: ../services/realtime
+    environment:
+      ECHOWEAVE_HOST: 0.0.0.0
+      ECHOWEAVE_PORT: 8765
+      ECHOWEAVE_ACCESS_TOKEN: ${ECHOWEAVE_ACCESS_TOKEN:?Set ECHOWEAVE_ACCESS_TOKEN in deploy/.env}
+      ECHOWEAVE_ALLOW_INSECURE_PRIVATE_TRANSPORT: "true"
+      ECHOWEAVE_ALLOWED_PERSONAS: demo
+      ECHOWEAVE_VAD_BACKEND: energy
+      ECHOWEAVE_ASR_BACKEND: demo
+      ECHOWEAVE_LLM_BACKEND: demo
+      ECHOWEAVE_TTS_BACKEND: browser
+      ECHOWEAVE_AVATAR_BACKEND: client_lipsync
+      ECHOWEAVE_CONSENT_STATE_PATH: /app/runtime/consent-state.json
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - realtime-state:/app/runtime
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    restart: unless-stopped
+
+volumes:
+  control-state:
+  runtime-state:
+  runtime-workspace:
+  fleet-state:
+  forge-registry:
+  realtime-state:

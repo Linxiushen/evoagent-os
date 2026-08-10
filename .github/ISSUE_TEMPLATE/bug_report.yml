@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible defect in a supported v0.1 path
+title: "[Bug]: "
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not disclose vulnerabilities, credentials, private prompts or real-person media here. Use GitHub private vulnerability reporting for security issues.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Control plane
+        - Contracts or Python SDK
+        - Runtime
+        - Fleet
+        - Forge
+        - Observability / HarnessLab
+        - Realtime / EchoWeave
+        - Documentation or deployment
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Version or commit
+      placeholder: v0.1.0 or full commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include exact commands and a minimal sanitized payload.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and evidence
+      description: Include relevant redacted output, trace invariant or state transition.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: OS, Python, Docker/Compose, browser, model/provider mode
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Safety checklist
+      options:
+        - label: I removed credentials, private data and real-person biometric media.
+          required: true
+        - label: This is not a security vulnerability or consent bypass.
+          required: true

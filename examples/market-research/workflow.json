@@ -1,0 +1,42 @@
+{
+  "name": "market-research-contract-demo",
+  "metadata": {
+    "scenario": "deterministic-fixture",
+    "notice": "Demonstrates orchestration contracts; it does not perform live market research."
+  },
+  "nodes": [
+    {
+      "id": "source-map",
+      "objective": "Build a cited source map for the target market using approved public sources.",
+      "capabilities": ["market.research"],
+      "input": {
+        "market": "enterprise agent control planes",
+        "region": "global",
+        "as_of": "2026-08-10",
+        "required_evidence": ["source URL", "publication date", "claim supported"]
+      },
+      "budget": {"tokens": 12000, "cost_usd": 2.0, "seconds": 300},
+      "max_attempts": 2
+    },
+    {
+      "id": "evidence-review",
+      "objective": "Reject unsupported claims and produce an evidence-qualified synthesis.",
+      "depends_on": ["source-map"],
+      "capabilities": ["market.review"],
+      "input": {
+        "required_sections": ["scope", "verified findings", "unknowns", "recommendations"]
+      },
+      "budget": {"tokens": 8000, "cost_usd": 1.5, "seconds": 240},
+      "max_attempts": 2
+    },
+    {
+      "id": "publish",
+      "objective": "Publish the reviewed brief only after an operator confirms the evidence boundary.",
+      "depends_on": ["evidence-review"],
+      "capabilities": ["artifact.publish"],
+      "approval_required": true,
+      "budget": {"tokens": 2000, "cost_usd": 0.25, "seconds": 120},
+      "max_attempts": 1
+    }
+  ]
+}

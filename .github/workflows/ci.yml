@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: ${{ matrix.component.name }} / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+        component:
+          - name: control-plane
+            path: .
+            install: -e .[dev]
+            ruff_args: ""
+            lint: apps/control-plane/src tests
+            tests: tests
+          - name: contracts
+            path: packages/contracts
+            install: -e .[dev]
+            ruff_args: ""
+            lint: .
+            tests: tests
+          - name: python-sdk
+            path: sdk/python
+            install: -e ../../packages/contracts -e .[dev]
+            ruff_args: ""
+            lint: .
+            tests: tests
+          - name: runtime
+            path: services/runtime
+            install: -e .[dev]
+            ruff_args: ""
+            lint: .
+            tests: tests
+          - name: fleet
+            path: services/fleet
+            install: -e .[dev]
+            ruff_args: ""
+            lint: .
+            tests: tests
+          - name: forge
+            path: services/forge
+            install: -e .[dev]
+            ruff_args: ""
+            lint: .
+            tests: tests
+          - name: observability
+            path: services/observability
+            install: -e .[dev]
+            ruff_args: ""
+            lint: .
+            tests: tests
+          - name: realtime
+            path: services/realtime
+            install: '-e .[dev] "numpy>=1.26,<3"'
+            # The imported preview has broader style/security lint debt. Keep a
+            # correctness gate here until its native policy is made clean.
+            ruff_args: --select E,F,B
+            lint: src tests
+            tests: tests
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.component.path }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: ${{ matrix.component.path }}/pyproject.toml
+
+      - name: Install component
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ${{ matrix.component.install }}
+
+      - name: Ruff lint
+        run: ruff check ${{ matrix.component.ruff_args }} ${{ matrix.component.lint }}
+
+      - name: Pytest
+        run: pytest -q ${{ matrix.component.tests }}
+
+  example-contract:
+    name: Validate example payloads
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Parse JSON examples and compile scripts
+        run: |
+          python -m json.tool examples/market-research/workflow.json > /dev/null
+          python -m py_compile examples/market-research/run_demo.py
+
+  typescript-sdk:
+    name: TypeScript SDK / Node 20
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: sdk/typescript/pnpm-lock.yaml
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build and test
+        run: pnpm test

@@ -1,0 +1,85 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule: &weekly
+      interval: weekly
+      day: monday
+    groups: &python-groups
+      python-runtime:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /packages/contracts
+    schedule: *weekly
+    groups: *python-groups
+
+  - package-ecosystem: pip
+    directory: /sdk/python
+    schedule: *weekly
+    groups: *python-groups
+
+  - package-ecosystem: npm
+    directory: /sdk/typescript
+    schedule: *weekly
+    groups:
+      typescript-sdk:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /services/runtime
+    schedule: *weekly
+    groups: *python-groups
+
+  - package-ecosystem: pip
+    directory: /services/fleet
+    schedule: *weekly
+    groups: *python-groups
+
+  - package-ecosystem: pip
+    directory: /services/forge
+    schedule: *weekly
+    groups: *python-groups
+
+  - package-ecosystem: pip
+    directory: /services/observability
+    schedule: *weekly
+    groups: *python-groups
+
+  - package-ecosystem: pip
+    directory: /services/realtime
+    schedule: *weekly
+    groups: *python-groups
+
+  - package-ecosystem: docker
+    directory: /deploy
+    schedule: *weekly
+
+  - package-ecosystem: docker
+    directory: /services/runtime
+    schedule: *weekly
+
+  - package-ecosystem: docker
+    directory: /services/fleet
+    schedule: *weekly
+
+  - package-ecosystem: docker
+    directory: /services/forge
+    schedule: *weekly
+
+  - package-ecosystem: docker
+    directory: /services/observability
+    schedule: *weekly
+
+  - package-ecosystem: docker
+    directory: /services/realtime
+    schedule: *weekly

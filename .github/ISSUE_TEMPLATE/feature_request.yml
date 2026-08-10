@@ -1,0 +1,50 @@
+name: Feature request
+description: Propose an operator outcome with an explicit trust boundary
+title: "[Feature]: "
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Operator problem
+      description: Describe the blocked workflow without prescribing a framework.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: What observable behavior would solve the problem?
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Trust and data boundary
+      description: Identify actors, credentials, side effects, personal data and external services.
+    validations:
+      required: true
+  - type: textarea
+    id: failure
+    attributes:
+      label: Failure and recovery behavior
+      description: Explain timeout, retry, duplicate-effect and rollback expectations.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Acceptance evidence
+      description: List tests, trace invariants, metrics or demo steps that should prove completion.
+    validations:
+      required: true
+  - type: dropdown
+    id: maturity
+    attributes:
+      label: Intended maturity
+      options:
+        - Research experiment
+        - v0.x development feature
+        - Production-readiness prerequisite
+    validations:
+      required: true

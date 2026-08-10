@@ -1,0 +1,43 @@
+name: evoagent-os
+
+services:
+  control-plane:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8765:8765"
+    environment:
+      EVOAGENT_PROVIDER: offline
+      EVOAGENT_OS_STATE_DIR: /var/lib/evoagent-os
+      EVOAGENT_OS_TOKEN: ${EVOAGENT_OS_TOKEN:-}
+    volumes:
+      - evoagent-state:/var/lib/evoagent-os
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    command:
+      - --url
+      - http://control-plane:8765
+      - --capability
+      - research
+      - --capability
+      - analysis
+      - --capability
+      - writing
+      - --capability
+      - artifacts
+      - --capability
+      - citations
+    environment:
+      EVOAGENT_OS_TOKEN: ${EVOAGENT_OS_TOKEN:-}
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  evoagent-state:
