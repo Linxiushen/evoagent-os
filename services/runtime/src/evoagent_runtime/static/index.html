@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>EvoAgent Runtime</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=2">
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">EA</span><div><strong>EvoAgent</strong><small>Runtime Console</small></div></div>
+    <nav aria-label="Runtime views">
+      <button class="nav-item active" data-view="operations"><i data-lucide="activity"></i><span>Operations</span></button>
+      <button class="nav-item" data-view="evolution"><i data-lucide="git-branch"></i><span>Evolution</span></button>
+    </nav>
+    <div class="connection">
+      <span id="status-dot" class="status-dot"></span>
+      <div><strong id="status-label">Connecting</strong><small id="provider-label">gateway</small></div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div><h1>Agent operations</h1><p id="clock">Local control plane</p></div>
+      <label class="token-field"><span>Gateway token</span><input id="gateway-token" type="password" autocomplete="off" placeholder="Optional"></label>
+      <button id="refresh" class="icon-button" title="Refresh data" aria-label="Refresh data"><i data-lucide="refresh-cw"></i></button>
+    </header>
+
+    <section id="operations" class="view active">
+      <div class="metrics" aria-label="Runtime summary">
+        <article><span>Runs</span><strong id="metric-runs">0</strong><small>recent ledger</small></article>
+        <article><span>Pending approvals</span><strong id="metric-approvals">0</strong><small>operator queue</small></article>
+        <article><span>Prompt version</span><strong id="metric-prompt">1</strong><small>active policy</small></article>
+        <article><span>Last event</span><strong id="metric-events">0</strong><small>sequence</small></article>
+      </div>
+
+      <div class="workspace-grid">
+        <section class="panel composer-panel">
+          <div class="panel-heading"><h2>Run agent</h2><span class="badge">offline-ready</span></div>
+          <form id="message-form">
+            <div class="field-row">
+              <label>Channel<input id="channel" value="console" required></label>
+              <label>Peer<input id="peer" value="operator" required></label>
+            </div>
+            <label>Message<textarea id="message" rows="6" required>recall: deployment window</textarea></label>
+            <button class="primary" type="submit"><i data-lucide="send"></i><span>Run</span></button>
+          </form>
+        </section>
+
+        <section class="panel approvals-panel">
+          <div class="panel-heading"><h2>Approvals</h2><button class="icon-button compact" id="approvals-refresh" title="Refresh approvals" aria-label="Refresh approvals"><i data-lucide="rotate-cw"></i></button></div>
+          <div id="approvals" class="approval-list"><div class="empty">No pending approvals</div></div>
+        </section>
+      </div>
+
+      <section class="panel table-panel">
+        <div class="panel-heading"><h2>Run ledger</h2><span id="run-count" class="muted">0 rows</span></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Status</th><th>Run</th><th>Session</th><th>Input</th><th>Output</th><th>Updated</th></tr></thead><tbody id="runs"></tbody></table>
+        </div>
+      </section>
+
+      <section class="panel event-panel">
+        <div class="panel-heading"><h2>Event stream</h2><span class="live-label"><span></span>Live ledger</span></div>
+        <ol id="events" class="events"></ol>
+      </section>
+    </section>
+
+    <section id="evolution" class="view">
+      <div class="evolution-band">
+        <div><h2>Prompt evolution</h2><p>Feedback-derived candidates remain isolated until evaluation and operator promotion.</p></div>
+        <button id="propose" class="primary"><i data-lucide="flask-conical"></i><span>Propose candidate</span></button>
+      </div>
+      <section class="panel table-panel">
+        <div class="panel-heading"><h2>Candidate archive</h2><span class="badge warning">manual promotion</span></div>
+        <div class="table-wrap"><table><thead><tr><th>State</th><th>Candidate</th><th>Parent</th><th>Baseline</th><th>Candidate</th><th>Safety</th></tr></thead><tbody id="candidates"></tbody></table></div>
+      </section>
+    </section>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+  </main>
+</body>
+</html>

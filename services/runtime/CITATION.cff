@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+title: EvoAgent Runtime
+message: If this software supports your work, please cite the repository release.
+type: software
+authors:
+  - name: EvoAgent Runtime Contributors
+version: 0.1.0
+date-released: 2026-08-05
+url: https://github.com/Linxiushen/evoagent-runtime
+license: Apache-2.0
+

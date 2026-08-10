@@ -1,0 +1,16 @@
+services:
+  gateway:
+    build: .
+    ports: ["8811:8811"]
+    environment:
+      EVOAGENT_STATE_DIR: /state
+      EVOAGENT_WORKSPACE: /workspace
+      EVOAGENT_GATEWAY_TOKEN: ${EVOAGENT_GATEWAY_TOKEN:-change-me}
+    volumes:
+      - runtime-state:/state
+      - runtime-workspace:/workspace
+    restart: unless-stopped
+volumes:
+  runtime-state:
+  runtime-workspace:
+
